@@ -17,10 +17,15 @@ export async function GET() {
       ? {
           pseudonyme: profile.pseudonym,
           metier_rome: `${profile.rome_code} — ${profile.rome_label}`,
+          secteur: profile.secteur_naf,
           classification: profile.classification,
           type_contrat: profile.contract_type,
-          zone: `${profile.city} (${profile.postal_code})`,
-          trajet_quotidien_km: profile.commute_km,
+          salaire_brut_annuel: profile.salaire_brut_annuel,
+          residence: `${profile.residence_city} (${profile.residence_postal_code})`,
+          lieu_travail: `${profile.workplace_city} (${profile.workplace_postal_code})`,
+          trajet_quotidien_km: profile.commute_distance_km,
+          trajet_quotidien_min: profile.commute_duration_min,
+          vehicule_actuel: `${profile.current_vehicle_type} / ${profile.current_fuel_type} / ${profile.current_fiscal_cv} CV`,
         }
       : null,
     consentements: consent

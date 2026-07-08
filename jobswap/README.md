@@ -1,9 +1,31 @@
-# JobSwap — application fonctionnelle (MVP réel)
+# JobSwap — application fonctionnelle (v2 : critères complets + calculs officiels)
 
-Application web complète : inscription, profil anonymisé, matching
-multi-critères, simulateur d'impact, et back-office RGPD (consentements,
-export, suppression). Base de données réelle (SQLite), API réelle
-(Next.js Route Handlers), sessions signées (JWT en cookie httpOnly).
+Application web complète : inscription, profil détaillé (poste, rémunération,
+avantages sociaux, prérequis, mobilité), matching pondéré multi-critères,
+calcul du gain réel (économique via le barème kilométrique fiscal officiel,
+écologique via les facteurs ADEME) à partir d'une distance domicile-travail
+calculée par itinéraire routier réel, et back-office RGPD.
+
+## Nouveautés v2
+
+- Résidence et lieu de travail sont désormais des champs distincts : le gain
+  d'un match se calcule depuis VOTRE domicile vers le lieu de travail du
+  candidat, pas une moyenne approximative.
+- Distance calculée par itinéraire routier réel via **OpenRouteService**
+  (clé API gratuite optionnelle — voir `.env.example`). Sans clé, une
+  estimation corrigée (vol d'oiseau × 1,3) est utilisée à la place, et
+  clairement indiquée comme telle dans l'interface.
+- Coût annuel calculé avec le **vrai barème kilométrique fiscal 2026**
+  (`lib/bareme.ts`), pas une approximation.
+- CO2 calculé avec les **facteurs ADEME réels** (`lib/emissions.ts`) :
+  carburant, fabrication amortie, mix électrique français.
+- Formulaire de profil étendu : rémunération brute, avantages sociaux
+  (mutuelle, RTT, télétravail, CSE...), conditions de travail, prérequis
+  (diplôme, certifications, permis), critères subjectifs (management,
+  ambiance, évolution, stress), véhicule actuel détaillé (motorisation,
+  puissance fiscale, consommation), mobilité envisagée après échange.
+- Le référentiel complet des critères (avec toutes les sources officielles)
+  est dans `JobSwap_Criteres_v2.md`, fourni séparément.
 
 ## Stack technique
 
@@ -11,8 +33,7 @@ export, suppression). Base de données réelle (SQLite), API réelle
 - **better-sqlite3** : base de données fichier, aucune dépendance externe
 - **jose** : signature de session (JWT en cookie httpOnly)
 - **bcryptjs** : hachage des mots de passe
-
-Aucune clé API externe n'est requise pour faire tourner l'application.
+- **OpenRouteService** (optionnel) : distance routière réelle
 
 ## Démarrage en local
 
@@ -24,6 +45,16 @@ npm run dev
 ```
 
 Ouvrez http://localhost:3000.
+
+## Activer la distance réelle par la route (recommandé)
+
+1. Créez un compte gratuit sur https://openrouteservice.org/dev/#/signup
+2. Récupérez votre clé API
+3. Ajoutez `ORS_API_KEY=votre_clé` dans votre fichier `.env` (en local) ou dans
+   les variables d'environnement de votre hébergeur (Render, etc.)
+
+Sans cette clé, l'application fonctionne quand même, avec une estimation
+moins précise, clairement signalée comme telle dans l'interface.
 
 ## Build de production
 

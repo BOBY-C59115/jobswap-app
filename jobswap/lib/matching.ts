@@ -1,28 +1,75 @@
 import { haversineKm } from "./geo";
 import { romeFamily } from "./rome";
+import { getRoute } from "./routing";
+import { annualTransportCost, FuelType } from "./bareme";
+import { emissionsForMode } from "./emissions";
 
 export type MatchCandidate = {
   id: string;
   pseudonym: string;
   romeCode: string;
   romeLabel: string;
+  secteurNaf: string;
   classification: string;
   contractType: string;
-  city: string;
-  lat: number;
-  lng: number;
-  commuteKm: number;
+  salaireBrutAnnuel: number;
+  mutuelleTauxEmployeur: number;
+  rttJours: number;
+  teleworkDaysPerWeek: number;
+  subjManagement: number;
+  subjValeurs: number;
+  subjAmbiance: number;
+  subjEvolution: number;
+  subjStress: number;
+  workplaceCity: string;
+  workplaceLat: number;
+  workplaceLng: number;
+};
+
+export type UserMobility = {
+  residenceLat: number;
+  residenceLng: number;
+  currentDistanceKm: number;
+  currentDurationMin: number;
+  commuteDaysPerWeek: number;
+  vehicleType: string;
+  fuelType: FuelType;
+  fiscalCv: number;
+  consumptionPer100km: number;
+  envisagedMode:
+    | "vehicule_identique"
+    | "vehicule_electrique"
+    | "vae"
+    | "marche"
+    | "transport_commun"
+    | "covoiturage";
+  envisagedFuelType?: FuelType;
+  envisagedFiscalCv?: number;
+  envisagedConsumption?: number;
+};
+
+export type MatchGains = {
+  newDistanceKm: number;
+  newDurationMin: number;
+  distanceSavedKmPerDay: number;
+  timeSavedMinPerDay: number;
+  timeSavedHoursPerYear: number;
+  economicGainPerYear: number;
+  co2SavedKgPerYear: number;
+  routeSource: "openrouteservice" | "estimation";
 };
 
 export type MatchResult = MatchCandidate & {
   score: number;
-  distanceEconomyKm: number; // km/jour économisés en moyenne si l'échange se fait
   breakdown: {
     metier: number;
     classification: number;
     contrat: number;
-    proximite: number;
+    remuneration: number;
+    attractivite: number;
+    mobilite: number;
   };
+  gains: MatchGains;
 };
 
 const CLASSIFICATION_ORDER = [
@@ -41,64 +88,157 @@ function classificationDistance(a: string, b: string): number {
   return Math.abs(ia - ib);
 }
 
-/**
- * Calcule un score de compatibilité 0-100 entre le profil de l'utilisateur
- * et un candidat, sur 4 critères pondérés :
- *  - métier (ROME) : 40 pts
- *  - classification : 20 pts
- *  - type de contrat : 10 pts
- *  - proximité géographique inversée (le candidat doit être situé
- *    près du DOMICILE probable de l'utilisateur, donc typiquement dans
- *    la ville où l'utilisateur travaille et vice-versa) : 30 pts
- */
-export function scoreMatch(
-  user: MatchCandidate,
+function cheapPreScore(
+  userRome: string,
+  userClassification: string,
+  userSalaire: number,
+  residenceLat: number,
+  residenceLng: number,
   candidate: MatchCandidate
-): MatchResult {
+): number {
   let metier = 0;
-  if (user.romeCode === candidate.romeCode) metier = 40;
-  else if (romeFamily(user.romeCode) === romeFamily(candidate.romeCode))
-    metier = 26;
-  else metier = 6;
+  if (userRome === candidate.romeCode) metier = 30;
+  else if (romeFamily(userRome) === romeFamily(candidate.romeCode)) metier = 18;
+  else metier = 4;
 
-  const classDist = classificationDistance(
-    user.classification,
-    candidate.classification
+  const classDist = classificationDistance(userClassification, candidate.classification);
+  const classification = Math.max(0, 15 - classDist * 5);
+
+  const salaireEcart = userSalaire > 0
+    ? Math.abs(userSalaire - candidate.salaireBrutAnnuel) / userSalaire
+    : 0;
+  const remuneration = Math.max(0, 10 - salaireEcart * 30);
+
+  const distKm = haversineKm(residenceLat, residenceLng, candidate.workplaceLat, candidate.workplaceLng);
+  const proximite = Math.max(0, 20 - distKm / 6);
+
+  return metier + classification + remuneration + proximite;
+}
+
+/**
+ * Calcule les gains réels (distance routière, temps, coût, CO2) pour un
+ * candidat donné, du point de vue de l'utilisateur (son domicile ne change
+ * pas, seul son lieu de travail changerait).
+ */
+export async function computeGains(
+  mobility: UserMobility,
+  candidate: MatchCandidate
+): Promise<MatchGains> {
+  const route = await getRoute(
+    mobility.residenceLat,
+    mobility.residenceLng,
+    candidate.workplaceLat,
+    candidate.workplaceLng
   );
-  const classification = Math.max(0, 20 - classDist * 7);
 
-  const contrat = user.contractType === candidate.contractType ? 10 : 4;
+  const daysPerYear = mobility.commuteDaysPerWeek * 47; // ~47 semaines travaillées/an
+  const currentAnnualKm = mobility.currentDistanceKm * 2 * daysPerYear;
+  const newAnnualKm = route.distanceKm * 2 * daysPerYear;
 
-  // Distance entre les deux lieux de travail : plus les entreprises sont
-  // proches du domicile "opposé" de l'autre, plus l'échange réduit les
-  // trajets combinés. On modélise via la distance entre les deux villes.
-  const distKm = haversineKm(user.lat, user.lng, candidate.lat, candidate.lng);
-  const proximite = Math.max(0, 30 - distKm / 8);
-
-  const score = Math.round(metier + classification + contrat + proximite);
-
-  // Estimation du gain journalier si les deux salariés échangent de poste :
-  // hypothèse que chacun retrouverait un trajet proche de son propre
-  // "commuteKm" divisé par un facteur d'éloignement actuel.
-  const distanceEconomyKm = Math.max(
-    0,
-    Math.round(((user.commuteKm + candidate.commuteKm) / 2) * 0.75)
+  const currentCost = annualTransportCost(
+    "vehicule_identique",
+    mobility.fiscalCv,
+    mobility.fuelType,
+    currentAnnualKm
   );
+  const newCost = annualTransportCost(
+    mobility.envisagedMode,
+    mobility.envisagedFiscalCv || mobility.fiscalCv,
+    mobility.envisagedFuelType || mobility.fuelType,
+    newAnnualKm
+  );
+
+  const currentEmissions = emissionsForMode(
+    "vehicule_identique",
+    mobility.fuelType,
+    mobility.consumptionPer100km,
+    currentAnnualKm
+  );
+  const newEmissions = emissionsForMode(
+    mobility.envisagedMode,
+    mobility.envisagedFuelType || mobility.fuelType,
+    mobility.envisagedConsumption || mobility.consumptionPer100km,
+    newAnnualKm
+  );
+
+  const distanceSavedKmPerDay = Math.max(0, (mobility.currentDistanceKm - route.distanceKm) * 2);
+  const timeSavedMinPerDay = Math.max(0, (mobility.currentDurationMin - route.durationMin) * 2);
 
   return {
-    ...candidate,
-    score: Math.min(100, score),
-    distanceEconomyKm,
-    breakdown: { metier, classification, contrat, proximite: Math.round(proximite) },
+    newDistanceKm: route.distanceKm,
+    newDurationMin: route.durationMin,
+    distanceSavedKmPerDay: Math.round(distanceSavedKmPerDay * 10) / 10,
+    timeSavedMinPerDay: Math.round(timeSavedMinPerDay),
+    timeSavedHoursPerYear: Math.round((timeSavedMinPerDay * daysPerYear) / 60),
+    economicGainPerYear: Math.round(currentCost - newCost),
+    co2SavedKgPerYear: Math.round(currentEmissions - newEmissions),
+    routeSource: route.source,
   };
 }
 
-export function rankMatches(
-  user: MatchCandidate,
-  pool: MatchCandidate[]
-): MatchResult[] {
-  return pool
-    .filter((c) => c.id !== user.id)
-    .map((c) => scoreMatch(user, c))
-    .sort((a, b) => b.score - a.score);
+export async function rankMatches(
+  userRome: string,
+  userClassification: string,
+  userSalaire: number,
+  mobility: UserMobility,
+  pool: MatchCandidate[],
+  excludeId: string,
+  limit = 15
+): Promise<MatchResult[]> {
+  const preScored = pool
+    .filter((c) => c.id !== excludeId)
+    .map((c) => ({
+      candidate: c,
+      pre: cheapPreScore(userRome, userClassification, userSalaire, mobility.residenceLat, mobility.residenceLng, c),
+    }))
+    .sort((a, b) => b.pre - a.pre)
+    .slice(0, Math.max(limit, 20));
+
+  const results: MatchResult[] = [];
+  for (const { candidate } of preScored) {
+    const gains = await computeGains(mobility, candidate);
+
+    let metier = 0;
+    if (userRome === candidate.romeCode) metier = 30;
+    else if (romeFamily(userRome) === romeFamily(candidate.romeCode)) metier = 18;
+    else metier = 4;
+
+    const classDist = classificationDistance(userClassification, candidate.classification);
+    const classification = Math.max(0, 15 - classDist * 5);
+    const contrat = 5; // information disponible mais non discriminante seule ici
+
+    const salaireEcart = userSalaire > 0
+      ? Math.abs(userSalaire - candidate.salaireBrutAnnuel) / userSalaire
+      : 0;
+    const remuneration = Math.max(0, 10 - salaireEcart * 30);
+
+    const attractiviteRaw =
+      (candidate.subjManagement +
+        candidate.subjValeurs +
+        candidate.subjAmbiance +
+        candidate.subjEvolution +
+        (6 - candidate.subjStress)) /
+      5;
+    const attractivite = Math.round((attractiviteRaw / 5) * 20);
+
+    const mobiliteRaw = Math.min(
+      20,
+      (gains.distanceSavedKmPerDay / 40) * 20
+    );
+    const mobilite = Math.round(Math.max(0, mobiliteRaw));
+
+    const score = Math.min(
+      100,
+      Math.round(metier + classification + contrat + remuneration + attractivite + mobilite)
+    );
+
+    results.push({
+      ...candidate,
+      score,
+      breakdown: { metier, classification, contrat, remuneration, attractivite, mobilite },
+      gains,
+    });
+  }
+
+  return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }

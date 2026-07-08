@@ -46,15 +46,15 @@ export default function DashboardHome() {
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Zone</div>
+            <div className="text-xs text-fog mb-1">Résidence → Travail</div>
             <div className="text-sm text-ink">
-              {profile.city} ({profile.postal_code})
+              {profile.residence_city} → {profile.workplace_city}
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Trajet actuel</div>
+            <div className="text-xs text-fog mb-1">Trajet actuel (réel)</div>
             <div className="text-sm text-ink">
-              {profile.commute_km} km / jour
+              {profile.commute_distance_km} km · {profile.commute_duration_min} min
             </div>
           </div>
         </div>

@@ -46,15 +46,26 @@ const ROME = [
   { code: "M1503", label: "Management des ressources humaines" },
 ];
 
+const SECTEURS = [
+  "Industrie manufacturière",
+  "Commerce de gros et détail",
+  "Transport et logistique",
+  "Construction / BTP",
+  "Information et communication",
+  "Activités financières et d'assurance",
+  "Activités spécialisées, scientifiques et techniques",
+  "Administration publique",
+  "Santé humaine et action sociale",
+];
+
 const CLASSIFICATIONS = [
-  "Employé",
-  "Agent de maîtrise",
-  "Technicien",
-  "Cadre N1",
-  "Cadre N2",
-  "Cadre N3",
+  "Employé", "Agent de maîtrise", "Technicien", "Cadre N1", "Cadre N2", "Cadre N3",
 ];
 const CONTRACTS = ["CDI", "CDD"];
+const SALAIRE_BASE = {
+  "Employé": 24000, "Agent de maîtrise": 28000, "Technicien": 30000,
+  "Cadre N1": 38000, "Cadre N2": 48000, "Cadre N3": 62000,
+};
 
 function mulberry32(seed) {
   return function () {
@@ -65,47 +76,54 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-function pick(arr, i) {
-  return arr[i % arr.length];
-}
+function pick(arr, i) { return arr[i % arr.length]; }
 
 const rand = mulberry32(42);
 const cityNames = Object.keys(CITIES);
 
 db.prepare(`DELETE FROM seed_profiles`).run();
 const insert = db.prepare(
-  `INSERT INTO seed_profiles (id, pseudonym, rome_code, rome_label, classification,
-   contract_type, city, postal_code, lat, lng, commute_km) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  `INSERT INTO seed_profiles (id, pseudonym, rome_code, rome_label, secteur_naf,
+   classification, contract_type, salaire_brut_annuel, mutuelle_taux_employeur,
+   rtt_jours, telework_days_per_week, subj_management, subj_valeurs, subj_ambiance,
+   subj_evolution, subj_stress, workplace_city, workplace_postal_code, workplace_lat, workplace_lng)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 );
-
-const insertMany = db.transaction((rows) => {
-  for (const r of rows) insert.run(...r);
-});
+const insertMany = db.transaction((rows) => { for (const r of rows) insert.run(...r); });
 
 const rows = [];
 for (let i = 0; i < 90; i++) {
   const city = pick(cityNames, i + Math.floor(rand() * cityNames.length));
   const rome = pick(ROME, i + Math.floor(rand() * ROME.length));
-  const classification = pick(
-    CLASSIFICATIONS,
-    i + Math.floor(rand() * CLASSIFICATIONS.length)
-  );
+  const classification = pick(CLASSIFICATIONS, i + Math.floor(rand() * CLASSIFICATIONS.length));
   const contractType = pick(CONTRACTS, Math.floor(rand() * 2));
+  const secteur = pick(SECTEURS, i + Math.floor(rand() * SECTEURS.length));
   const c = CITIES[city];
+  const base = SALAIRE_BASE[classification];
+  const salaire = Math.round((base * (0.9 + rand() * 0.3)) / 100) * 100;
+
   rows.push([
     crypto.randomUUID(),
     `Salarié ${rome.code}-${c.postalCode.slice(0, 2)}${i}`,
     rome.code,
     rome.label,
+    secteur,
     classification,
     contractType,
+    salaire,
+    Math.round(30 + rand() * 70), // mutuelle_taux_employeur 30-100%
+    Math.round(rand() * 15), // rtt_jours 0-15
+    Math.round(rand() * 3), // telework_days_per_week 0-3
+    Math.round(2 + rand() * 3), // subj_management 2-5
+    Math.round(2 + rand() * 3),
+    Math.round(2 + rand() * 3),
+    Math.round(1 + rand() * 4),
+    Math.round(1 + rand() * 4),
     city,
     c.postalCode,
     c.lat + (rand() - 0.5) * 0.05,
     c.lng + (rand() - 0.5) * 0.05,
-    Math.round(8 + rand() * 70),
   ]);
 }
 insertMany(rows);
-console.log(`Seed terminé : ${rows.length} profils de démonstration créés.`);
+console.log(`Seed terminé : ${rows.length} profils de démonstration créés (v2).`);
