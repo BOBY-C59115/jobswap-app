@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Outfit", sans-serif;
+  background: #0c1a27;
+  color: #0c1a27;
+}
+
+.card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 6px 24px rgba(12, 26, 39, 0.11);
+}
+
+.btn-primary {
+  background: #0daa85;
+  color: #fff;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: filter 0.15s;
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: #f0f6ff;
+  color: #1a3348;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.input {
+  border: 1px solid #e2ecf8;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+}
+.input:focus {
+  border-color: #0daa85;
+  box-shadow: 0 0 0 3px rgba(13, 170, 133, 0.14);
+}
+
+.score-badge {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
