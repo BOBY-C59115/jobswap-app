@@ -1,0 +1,7 @@
+node_modules
+.next
+db/*.sqlite3
+db/*.sqlite3-*
+.env
+.env.local
+npm-debug.log*
