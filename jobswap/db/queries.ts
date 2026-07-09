@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { db } from "./client";
+import { query, queryOne } from "./client";
 
 export type User = {
   id: string;
@@ -111,32 +111,36 @@ export type SeedProfile = {
 };
 
 // ── Users ────────────────────────────────────────────────────────────────
-export function createUser(email: string, passwordHash: string): User {
+export async function createUser(email: string, passwordHash: string): Promise<User> {
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)`
-  ).run(id, email.toLowerCase().trim(), passwordHash);
-  return getUserById(id)!;
+  await query(
+    `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`,
+    [id, email.toLowerCase().trim(), passwordHash]
+  );
+  return (await getUserById(id))!;
 }
 
-export function getUserByEmail(email: string): User | undefined {
-  return db
-    .prepare(`SELECT * FROM users WHERE email = ? AND deleted_at IS NULL`)
-    .get(email.toLowerCase().trim()) as User | undefined;
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  return queryOne<User>(
+    `SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`,
+    [email.toLowerCase().trim()]
+  );
 }
 
-export function getUserById(id: string): User | undefined {
-  return db
-    .prepare(`SELECT * FROM users WHERE id = ? AND deleted_at IS NULL`)
-    .get(id) as User | undefined;
+export async function getUserById(id: string): Promise<User | undefined> {
+  return queryOne<User>(
+    `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
+    [id]
+  );
 }
 
-export function softDeleteUser(id: string) {
-  db.prepare(
-    `UPDATE users SET email = ?, password_hash = '', deleted_at = datetime('now') WHERE id = ?`
-  ).run(`deleted-${id}@anonymized.jobswap`, id);
-  db.prepare(`DELETE FROM profiles WHERE user_id = ?`).run(id);
-  db.prepare(`DELETE FROM consents WHERE user_id = ?`).run(id);
+export async function softDeleteUser(id: string) {
+  await query(
+    `UPDATE users SET email = $1, password_hash = '', deleted_at = NOW() WHERE id = $2`,
+    [`deleted-${id}@anonymized.jobswap`, id]
+  );
+  await query(`DELETE FROM profiles WHERE user_id = $1`, [id]);
+  await query(`DELETE FROM consents WHERE user_id = $1`, [id]);
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────
@@ -157,71 +161,70 @@ const PROFILE_COLUMNS = [
   "open_to_remote",
 ] as const;
 
-export function upsertProfile(userId: string, data: ProfileInput): Profile {
-  const existing = getProfileByUserId(userId);
+export async function upsertProfile(userId: string, data: ProfileInput): Promise<Profile> {
+  const existing = await getProfileByUserId(userId);
   const values = PROFILE_COLUMNS.map((c) => (data as any)[c]);
 
   if (existing) {
-    const setClause = PROFILE_COLUMNS.map((c) => `${c}=?`).join(", ");
-    db.prepare(
-      `UPDATE profiles SET ${setClause}, updated_at=datetime('now') WHERE user_id=?`
-    ).run(...values, userId);
+    const setClause = PROFILE_COLUMNS.map((c, i) => `${c}=$${i + 1}`).join(", ");
+    await query(
+      `UPDATE profiles SET ${setClause}, updated_at=NOW() WHERE user_id=$${PROFILE_COLUMNS.length + 1}`,
+      [...values, userId]
+    );
   } else {
     const cols = ["id", "user_id", ...PROFILE_COLUMNS].join(", ");
-    const placeholders = ["?", "?", ...PROFILE_COLUMNS.map(() => "?")].join(", ");
-    db.prepare(`INSERT INTO profiles (${cols}) VALUES (${placeholders})`).run(
-      randomUUID(),
-      userId,
-      ...values
+    const placeholders = [1, 2, ...PROFILE_COLUMNS.map((_, i) => i + 3)]
+      .map((n) => `$${n}`)
+      .join(", ");
+    await query(
+      `INSERT INTO profiles (${cols}) VALUES (${placeholders})`,
+      [randomUUID(), userId, ...values]
     );
   }
-  return getProfileByUserId(userId)!;
+  return (await getProfileByUserId(userId))!;
 }
 
-export function getProfileByUserId(userId: string): Profile | undefined {
-  return db
-    .prepare(`SELECT * FROM profiles WHERE user_id = ?`)
-    .get(userId) as Profile | undefined;
+export async function getProfileByUserId(userId: string): Promise<Profile | undefined> {
+  return queryOne<Profile>(`SELECT * FROM profiles WHERE user_id = $1`, [userId]);
 }
 
 // ── Consents ─────────────────────────────────────────────────────────────
-export function ensureConsent(userId: string): Consent {
-  const existing = getConsent(userId);
+export async function ensureConsent(userId: string): Promise<Consent> {
+  const existing = await getConsent(userId);
   if (existing) return existing;
   const id = randomUUID();
-  db.prepare(`INSERT INTO consents (id, user_id) VALUES (?, ?)`).run(id, userId);
-  return getConsent(userId)!;
+  await query(`INSERT INTO consents (id, user_id) VALUES ($1, $2)`, [id, userId]);
+  return (await getConsent(userId))!;
 }
 
-export function getConsent(userId: string): Consent | undefined {
-  return db
-    .prepare(`SELECT * FROM consents WHERE user_id = ?`)
-    .get(userId) as Consent | undefined;
+export async function getConsent(userId: string): Promise<Consent | undefined> {
+  return queryOne<Consent>(`SELECT * FROM consents WHERE user_id = $1`, [userId]);
 }
 
-export function updateConsent(
+export async function updateConsent(
   userId: string,
   phases: Partial<Pick<Consent, "phase2" | "phase3" | "phase4">>
-): Consent {
-  ensureConsent(userId);
-  const current = getConsent(userId)!;
+): Promise<Consent> {
+  await ensureConsent(userId);
+  const current = (await getConsent(userId))!;
   const phase2 = phases.phase2 ?? current.phase2;
   let phase3 = phases.phase3 ?? current.phase3;
   let phase4 = phases.phase4 ?? current.phase4;
   if (!phase2) { phase3 = 0; phase4 = 0; }
   if (!phase3) phase4 = 0;
-  db.prepare(
-    `UPDATE consents SET phase2=?, phase3=?, phase4=?, updated_at=datetime('now') WHERE user_id=?`
-  ).run(phase2, phase3, phase4, userId);
-  return getConsent(userId)!;
+  await query(
+    `UPDATE consents SET phase2=$1, phase3=$2, phase4=$3, updated_at=NOW() WHERE user_id=$4`,
+    [phase2, phase3, phase4, userId]
+  );
+  return (await getConsent(userId))!;
 }
 
 // ── Seed pool ────────────────────────────────────────────────────────────
-export function getSeedPool(): SeedProfile[] {
-  return db.prepare(`SELECT * FROM seed_profiles`).all() as SeedProfile[];
+export async function getSeedPool(): Promise<SeedProfile[]> {
+  return query<SeedProfile>(`SELECT * FROM seed_profiles`);
 }
 
-export function countSeedProfiles(): number {
-  const row = db.prepare(`SELECT COUNT(*) as c FROM seed_profiles`).get() as { c: number };
-  return row.c;
+export async function countSeedProfiles(): Promise<number> {
+  const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM seed_profiles`);
+  return row ? parseInt(row.c, 10) : 0;
 }

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing) {
     return NextResponse.json(
       { error: "Un compte existe déjà avec cet e-mail." },
@@ -29,8 +29,8 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await hashPassword(password);
-  const user = createUser(email, passwordHash);
-  ensureConsent(user.id);
+  const user = await createUser(email, passwordHash);
+  await ensureConsent(user.id);
   await createSession(user.id);
 
   return NextResponse.json({ ok: true, userId: user.id });

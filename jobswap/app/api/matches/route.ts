@@ -9,7 +9,7 @@ export async function GET() {
   if (!userId)
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  const consent = getConsent(userId);
+  const consent = await getConsent(userId);
   if (consent && !consent.phase2) {
     return NextResponse.json({
       matches: [],
@@ -19,7 +19,7 @@ export async function GET() {
     });
   }
 
-  const profile = getProfileByUserId(userId);
+  const profile = await getProfileByUserId(userId);
   if (!profile) {
     return NextResponse.json(
       { error: "Complétez votre profil avant de consulter vos matches." },
@@ -27,7 +27,8 @@ export async function GET() {
     );
   }
 
-  const seedPool = getSeedPool().map(
+  const seedPoolRaw = await getSeedPool();
+  const seedPool = seedPoolRaw.map(
     (p): MatchCandidate => ({
       id: p.id,
       pseudonym: p.pseudonym,

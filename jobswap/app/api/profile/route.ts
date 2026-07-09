@@ -129,6 +129,6 @@ export async function POST(req: NextRequest) {
     open_to_remote: body.openToRemote ? 1 : 0,
   };
 
-  const profile = upsertProfile(userId, profileInput);
+  const profile = await upsertProfile(userId, profileInput);
   return NextResponse.json({ ok: true, profile, routeSource: route.source });
 }

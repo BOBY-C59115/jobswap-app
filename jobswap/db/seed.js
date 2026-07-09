@@ -1,11 +1,17 @@
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const DB_PATH = path.join(process.cwd(), "db", "jobswap.sqlite3");
-const db = new Database(DB_PATH);
-db.exec(fs.readFileSync(path.join(process.cwd(), "db", "schema.sql"), "utf-8"));
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL n'est pas défini. Ajoutez-le dans votre .env (voir .env.example).");
+  process.exit(1);
+}
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 const CITIES = {
   Lyon: { lat: 45.764, lng: 4.8357, postalCode: "69002" },
@@ -47,20 +53,13 @@ const ROME = [
 ];
 
 const SECTEURS = [
-  "Industrie manufacturière",
-  "Commerce de gros et détail",
-  "Transport et logistique",
-  "Construction / BTP",
-  "Information et communication",
-  "Activités financières et d'assurance",
-  "Activités spécialisées, scientifiques et techniques",
-  "Administration publique",
+  "Industrie manufacturière", "Commerce de gros et détail", "Transport et logistique",
+  "Construction / BTP", "Information et communication", "Activités financières et d'assurance",
+  "Activités spécialisées, scientifiques et techniques", "Administration publique",
   "Santé humaine et action sociale",
 ];
 
-const CLASSIFICATIONS = [
-  "Employé", "Agent de maîtrise", "Technicien", "Cadre N1", "Cadre N2", "Cadre N3",
-];
+const CLASSIFICATIONS = ["Employé", "Agent de maîtrise", "Technicien", "Cadre N1", "Cadre N2", "Cadre N3"];
 const CONTRACTS = ["CDI", "CDD"];
 const SALAIRE_BASE = {
   "Employé": 24000, "Agent de maîtrise": 28000, "Technicien": 30000,
@@ -78,52 +77,54 @@ function mulberry32(seed) {
 }
 function pick(arr, i) { return arr[i % arr.length]; }
 
-const rand = mulberry32(42);
-const cityNames = Object.keys(CITIES);
+async function main() {
+  const schema = fs.readFileSync(path.join(process.cwd(), "db", "schema.sql"), "utf-8");
+  await pool.query(schema);
+  await pool.query("DELETE FROM seed_profiles");
 
-db.prepare(`DELETE FROM seed_profiles`).run();
-const insert = db.prepare(
-  `INSERT INTO seed_profiles (id, pseudonym, rome_code, rome_label, secteur_naf,
-   classification, contract_type, salaire_brut_annuel, mutuelle_taux_employeur,
-   rtt_jours, telework_days_per_week, subj_management, subj_valeurs, subj_ambiance,
-   subj_evolution, subj_stress, workplace_city, workplace_postal_code, workplace_lat, workplace_lng)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-);
-const insertMany = db.transaction((rows) => { for (const r of rows) insert.run(...r); });
+  const rand = mulberry32(42);
+  const cityNames = Object.keys(CITIES);
 
-const rows = [];
-for (let i = 0; i < 90; i++) {
-  const city = pick(cityNames, i + Math.floor(rand() * cityNames.length));
-  const rome = pick(ROME, i + Math.floor(rand() * ROME.length));
-  const classification = pick(CLASSIFICATIONS, i + Math.floor(rand() * CLASSIFICATIONS.length));
-  const contractType = pick(CONTRACTS, Math.floor(rand() * 2));
-  const secteur = pick(SECTEURS, i + Math.floor(rand() * SECTEURS.length));
-  const c = CITIES[city];
-  const base = SALAIRE_BASE[classification];
-  const salaire = Math.round((base * (0.9 + rand() * 0.3)) / 100) * 100;
+  for (let i = 0; i < 90; i++) {
+    const city = pick(cityNames, i + Math.floor(rand() * cityNames.length));
+    const rome = pick(ROME, i + Math.floor(rand() * ROME.length));
+    const classification = pick(CLASSIFICATIONS, i + Math.floor(rand() * CLASSIFICATIONS.length));
+    const contractType = pick(CONTRACTS, Math.floor(rand() * 2));
+    const secteur = pick(SECTEURS, i + Math.floor(rand() * SECTEURS.length));
+    const c = CITIES[city];
+    const base = SALAIRE_BASE[classification];
+    const salaire = Math.round((base * (0.9 + rand() * 0.3)) / 100) * 100;
 
-  rows.push([
-    crypto.randomUUID(),
-    `Salarié ${rome.code}-${c.postalCode.slice(0, 2)}${i}`,
-    rome.code,
-    rome.label,
-    secteur,
-    classification,
-    contractType,
-    salaire,
-    Math.round(30 + rand() * 70), // mutuelle_taux_employeur 30-100%
-    Math.round(rand() * 15), // rtt_jours 0-15
-    Math.round(rand() * 3), // telework_days_per_week 0-3
-    Math.round(2 + rand() * 3), // subj_management 2-5
-    Math.round(2 + rand() * 3),
-    Math.round(2 + rand() * 3),
-    Math.round(1 + rand() * 4),
-    Math.round(1 + rand() * 4),
-    city,
-    c.postalCode,
-    c.lat + (rand() - 0.5) * 0.05,
-    c.lng + (rand() - 0.5) * 0.05,
-  ]);
+    await pool.query(
+      `INSERT INTO seed_profiles (id, pseudonym, rome_code, rome_label, secteur_naf,
+       classification, contract_type, salaire_brut_annuel, mutuelle_taux_employeur,
+       rtt_jours, telework_days_per_week, subj_management, subj_valeurs, subj_ambiance,
+       subj_evolution, subj_stress, workplace_city, workplace_postal_code, workplace_lat, workplace_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        crypto.randomUUID(),
+        `Salarié ${rome.code}-${c.postalCode.slice(0, 2)}${i}`,
+        rome.code, rome.label, secteur, classification, contractType, salaire,
+        Math.round(30 + rand() * 70),
+        Math.round(rand() * 15),
+        Math.round(rand() * 3),
+        Math.round(2 + rand() * 3),
+        Math.round(2 + rand() * 3),
+        Math.round(2 + rand() * 3),
+        Math.round(1 + rand() * 4),
+        Math.round(1 + rand() * 4),
+        city, c.postalCode,
+        c.lat + (rand() - 0.5) * 0.05,
+        c.lng + (rand() - 0.5) * 0.05,
+      ]
+    );
+  }
+
+  console.log("Seed terminé : 90 profils de démonstration créés (v4, Postgres).");
+  await pool.end();
 }
-insertMany(rows);
-console.log(`Seed terminé : ${rows.length} profils de démonstration créés (v2).`);
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const email = (body?.email || "").trim();
   const password = body?.password || "";
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user) {
     return NextResponse.json(
       { error: "Identifiants incorrects." },

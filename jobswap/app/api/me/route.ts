@@ -6,11 +6,11 @@ export async function GET() {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ user: null }, { status: 200 });
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) return NextResponse.json({ user: null }, { status: 200 });
 
-  const profile = getProfileByUserId(userId);
-  const consent = ensureConsent(userId);
+  const profile = await getProfileByUserId(userId);
+  const consent = await ensureConsent(userId);
 
   return NextResponse.json({
     user: { id: user.id, email: user.email, createdAt: user.created_at },

@@ -7,7 +7,7 @@ export async function DELETE() {
   if (!userId)
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  softDeleteUser(userId);
+  await softDeleteUser(userId);
   await destroySession();
 
   return NextResponse.json({ ok: true });

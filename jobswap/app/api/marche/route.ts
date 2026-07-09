@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   if (!romeCode || !city) {
     const userId = await getSessionUserId();
     if (userId) {
-      const profile = getProfileByUserId(userId);
+      const profile = await getProfileByUserId(userId);
       if (profile) {
         romeCode = romeCode || profile.rome_code;
         secteurNaf = secteurNaf || profile.secteur_naf;

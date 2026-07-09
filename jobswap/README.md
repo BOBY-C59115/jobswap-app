@@ -1,53 +1,57 @@
-# JobSwap — application fonctionnelle (v3 : données de marché réelles)
+# JobSwap — application fonctionnelle (v4 : base de données persistante)
 
 Application web complète : inscription, profil détaillé (poste, rémunération,
 avantages sociaux, prérequis, mobilité), matching pondéré multi-critères,
 calcul du gain réel (économique via le barème kilométrique fiscal officiel,
-écologique via les facteurs ADEME), et données de marché réelles (offres
-d'emploi France Travail, établissements INSEE Sirene) pour donner du
-contexte tant qu'il y a peu de profils inscrits.
+écologique via les facteurs ADEME), données de marché réelles (France
+Travail, INSEE Sirene), et désormais une **vraie base de données persistante
+(Postgres)** qui ne s'efface plus à chaque redéploiement.
 
-## Nouveautés v3
+## Nouveautés v4 — pourquoi ce changement
 
-- **Page publique "Pourquoi JobSwap"** (`/pourquoi`) : statistiques citées et
-  sourcées sur le lien trajet/bien-être (études IFOP, OpinionWay), plus un
-  widget en direct interrogeant deux APIs publiques réelles.
-- **Onglet "Marché"** dans le tableau de bord : les mêmes données, calculées
-  automatiquement à partir du profil de l'utilisateur connecté.
-- **France Travail** (`lib/francetravail.ts`) : nombre réel d'offres
-  d'emploi ouvertes pour le code ROME et le département de l'utilisateur,
-  avec quelques exemples et attribution de la source. Nécessite un compte
-  gratuit sur francetravail.io (voir `.env.example`). Sans identifiants
-  configurés, la statistique est simplement masquée — jamais de chiffre
-  inventé.
-- **INSEE Sirene** (`lib/entreprises.ts`), via l'API publique et **gratuite
-  sans inscription** `recherche-entreprises.api.gouv.fr` : nombre réel
-  d'établissements du secteur d'activité choisi, recensés à proximité.
-  Fonctionne dès le déploiement, aucune clé requise.
+Les versions précédentes stockaient les données dans un simple fichier
+(SQLite) sur le disque du serveur. Sur la plupart des hébergeurs (dont
+Render), ce disque est recréé à neuf à chaque redéploiement — donc **toutes
+les données de test disparaissaient** à chaque mise à jour de code ou de
+variable d'environnement. Ce n'était pas un bug, mais une limite connue de
+ce choix technique, indiquée dans les versions précédentes du README.
 
-### Sur l'honnêteté de ces statistiques
+La v4 remplace ce fichier par une **vraie base Postgres externe** (hébergée
+séparément du serveur d'application, par exemple sur **Neon**, gratuit et
+sans limite de durée). Les données survivent désormais à tous les
+redéploiements, changements de code, et redémarrages.
 
-Ces deux sources décrivent le **marché de l'emploi en général** (offres
-ouvertes, entreprises recensées) — ce ne sont **pas** des salariés inscrits
-sur JobSwap prêts à échanger. L'interface le précise explicitement pour ne
-jamais laisser croire à un volume de matches qui n'existe pas encore. Il n'y
-a pas non plus, à ce jour, de donnée publique du type "score de bien-être
-par métier précis" : l'enquête de référence sur le sujet (Insee/Dares,
-"Conditions de travail et risques psychosociaux") publie ses premiers
-résultats à partir de 2026 — à surveiller pour une v4.
+### Migrer votre déploiement existant
 
-### Activer les statistiques France Travail
+1. Créez un compte gratuit sur https://neon.tech
+2. Créez un projet (nommez-le par exemple "jobswap")
+3. Copiez la "Connection string" affichée (commence par `postgresql://`)
+4. Sur Render : Environment → Add Environment Variable → clé `DATABASE_URL`,
+   valeur = la chaîne copiée
+5. Redéployez (Render le fait automatiquement après l'enregistrement des
+   variables), puis lancez le peuplement des profils de démonstration une
+   fois (voir plus bas)
 
-1. Créez un compte gratuit sur https://francetravail.io
-2. Créez une application, associez-la à l'API "Offres d'emploi"
-3. Récupérez l'identifiant client et la clé secrète
-4. Ajoutez `FT_CLIENT_ID` et `FT_CLIENT_SECRET` dans vos variables
-   d'environnement (Render : Settings → Environment)
+**Important** : cette migration change le mécanisme de stockage. Les
+données créées sous l'ancienne version (SQLite) ne sont pas transférées
+automatiquement — c'est un nouveau départ, propre, mais vous devrez
+recréer votre compte de test une fois la bascule faite.
+
+### Lancer le peuplement des profils de démonstration sur Neon
+
+Depuis votre machine, avec `DATABASE_URL` renseigné dans `.env` :
+```bash
+npm install
+node db/seed.js
+```
+Ceci se connecte directement à votre base Neon et y insère les 90 profils
+fictifs. Pas besoin de le refaire à chaque déploiement — c'est fait une
+fois, les données restent en base.
 
 ## Stack technique
 
 - **Next.js 14** (App Router) + TypeScript + Tailwind CSS
-- **better-sqlite3** : base de données fichier, aucune dépendance externe
+- **Postgres** (hébergé, ex. Neon) via le driver `pg`
 - **jose** : signature de session (JWT en cookie httpOnly)
 - **bcryptjs** : hachage des mots de passe
 - **OpenRouteService** (optionnel) : distance routière réelle
@@ -58,12 +62,35 @@ résultats à partir de 2026 — à surveiller pour une v4.
 
 ```bash
 npm install
-node db/seed.js       # crée un bassin de 90 profils fictifs pour le matching de démo
-cp .env.example .env  # puis générez un vrai JWT_SECRET (voir commentaire dans le fichier)
+cp .env.example .env  # renseignez DATABASE_URL (Neon) et générez un vrai JWT_SECRET
+node db/seed.js        # crée un bassin de 90 profils fictifs pour le matching de démo
 npm run dev
 ```
 
 Ouvrez http://localhost:3000.
+
+## Activer les statistiques France Travail (optionnel)
+
+1. Créez un compte gratuit sur https://francetravail.io
+2. Créez une application, associez-la à l'API "Offres d'emploi"
+3. Récupérez l'identifiant client et la clé secrète
+4. Ajoutez `FT_CLIENT_ID` et `FT_CLIENT_SECRET` dans vos variables
+   d'environnement (Render : Environment → Add Environment Variable)
+
+Sans ces identifiants, la statistique correspondante est simplement
+masquée — jamais de chiffre inventé. Les statistiques INSEE Sirene, elles,
+fonctionnent sans aucune clé.
+
+### Sur l'honnêteté de ces statistiques de marché
+
+France Travail et INSEE Sirene décrivent le **marché de l'emploi en
+général** (offres ouvertes, entreprises recensées) — ce ne sont **pas** des
+salariés inscrits sur JobSwap prêts à échanger. L'interface le précise
+explicitement. Il n'existe pas non plus, à ce jour, de donnée publique du
+type "score de bien-être par métier précis" : l'enquête de référence sur le
+sujet (Insee/Dares, "Conditions de travail et risques psychosociaux")
+publie ses premiers résultats à partir de 2026 — à surveiller pour une
+prochaine version.
 
 ## Activer la distance réelle par la route (recommandé)
 

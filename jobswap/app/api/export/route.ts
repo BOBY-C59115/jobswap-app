@@ -7,9 +7,9 @@ export async function GET() {
   if (!userId)
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  const user = getUserById(userId);
-  const profile = getProfileByUserId(userId);
-  const consent = getConsent(userId);
+  const user = await getUserById(userId);
+  const profile = await getProfileByUserId(userId);
+  const consent = await getConsent(userId);
 
   const payload = {
     compte: { email: user?.email, cree_le: user?.created_at },
