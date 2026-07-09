@@ -1,31 +1,48 @@
-# JobSwap — application fonctionnelle (v2 : critères complets + calculs officiels)
+# JobSwap — application fonctionnelle (v3 : données de marché réelles)
 
 Application web complète : inscription, profil détaillé (poste, rémunération,
 avantages sociaux, prérequis, mobilité), matching pondéré multi-critères,
 calcul du gain réel (économique via le barème kilométrique fiscal officiel,
-écologique via les facteurs ADEME) à partir d'une distance domicile-travail
-calculée par itinéraire routier réel, et back-office RGPD.
+écologique via les facteurs ADEME), et données de marché réelles (offres
+d'emploi France Travail, établissements INSEE Sirene) pour donner du
+contexte tant qu'il y a peu de profils inscrits.
 
-## Nouveautés v2
+## Nouveautés v3
 
-- Résidence et lieu de travail sont désormais des champs distincts : le gain
-  d'un match se calcule depuis VOTRE domicile vers le lieu de travail du
-  candidat, pas une moyenne approximative.
-- Distance calculée par itinéraire routier réel via **OpenRouteService**
-  (clé API gratuite optionnelle — voir `.env.example`). Sans clé, une
-  estimation corrigée (vol d'oiseau × 1,3) est utilisée à la place, et
-  clairement indiquée comme telle dans l'interface.
-- Coût annuel calculé avec le **vrai barème kilométrique fiscal 2026**
-  (`lib/bareme.ts`), pas une approximation.
-- CO2 calculé avec les **facteurs ADEME réels** (`lib/emissions.ts`) :
-  carburant, fabrication amortie, mix électrique français.
-- Formulaire de profil étendu : rémunération brute, avantages sociaux
-  (mutuelle, RTT, télétravail, CSE...), conditions de travail, prérequis
-  (diplôme, certifications, permis), critères subjectifs (management,
-  ambiance, évolution, stress), véhicule actuel détaillé (motorisation,
-  puissance fiscale, consommation), mobilité envisagée après échange.
-- Le référentiel complet des critères (avec toutes les sources officielles)
-  est dans `JobSwap_Criteres_v2.md`, fourni séparément.
+- **Page publique "Pourquoi JobSwap"** (`/pourquoi`) : statistiques citées et
+  sourcées sur le lien trajet/bien-être (études IFOP, OpinionWay), plus un
+  widget en direct interrogeant deux APIs publiques réelles.
+- **Onglet "Marché"** dans le tableau de bord : les mêmes données, calculées
+  automatiquement à partir du profil de l'utilisateur connecté.
+- **France Travail** (`lib/francetravail.ts`) : nombre réel d'offres
+  d'emploi ouvertes pour le code ROME et le département de l'utilisateur,
+  avec quelques exemples et attribution de la source. Nécessite un compte
+  gratuit sur francetravail.io (voir `.env.example`). Sans identifiants
+  configurés, la statistique est simplement masquée — jamais de chiffre
+  inventé.
+- **INSEE Sirene** (`lib/entreprises.ts`), via l'API publique et **gratuite
+  sans inscription** `recherche-entreprises.api.gouv.fr` : nombre réel
+  d'établissements du secteur d'activité choisi, recensés à proximité.
+  Fonctionne dès le déploiement, aucune clé requise.
+
+### Sur l'honnêteté de ces statistiques
+
+Ces deux sources décrivent le **marché de l'emploi en général** (offres
+ouvertes, entreprises recensées) — ce ne sont **pas** des salariés inscrits
+sur JobSwap prêts à échanger. L'interface le précise explicitement pour ne
+jamais laisser croire à un volume de matches qui n'existe pas encore. Il n'y
+a pas non plus, à ce jour, de donnée publique du type "score de bien-être
+par métier précis" : l'enquête de référence sur le sujet (Insee/Dares,
+"Conditions de travail et risques psychosociaux") publie ses premiers
+résultats à partir de 2026 — à surveiller pour une v4.
+
+### Activer les statistiques France Travail
+
+1. Créez un compte gratuit sur https://francetravail.io
+2. Créez une application, associez-la à l'API "Offres d'emploi"
+3. Récupérez l'identifiant client et la clé secrète
+4. Ajoutez `FT_CLIENT_ID` et `FT_CLIENT_SECRET` dans vos variables
+   d'environnement (Render : Settings → Environment)
 
 ## Stack technique
 
@@ -34,6 +51,8 @@ calculée par itinéraire routier réel, et back-office RGPD.
 - **jose** : signature de session (JWT en cookie httpOnly)
 - **bcryptjs** : hachage des mots de passe
 - **OpenRouteService** (optionnel) : distance routière réelle
+- **France Travail** (optionnel) et **INSEE Sirene** (aucune clé requise) :
+  données de marché réelles
 
 ## Démarrage en local
 

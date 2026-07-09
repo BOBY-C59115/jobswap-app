@@ -36,6 +36,11 @@ export default function Home() {
             J&apos;ai déjà un compte
           </Link>
         </div>
+        <div className="mt-4">
+          <Link href="/pourquoi" className="text-mist text-xs underline">
+            Voir les données réelles sur le trajet et le marché de l&apos;emploi
+          </Link>
+        </div>
 
         <div className="mt-14 grid grid-cols-3 gap-4 text-center">
           <div className="card p-4">

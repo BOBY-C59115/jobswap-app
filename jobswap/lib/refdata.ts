@@ -75,3 +75,21 @@ export const ENVISAGED_MODES = [
   { value: "transport_commun", label: "Transport en commun" },
   { value: "covoiturage", label: "Covoiturage" },
 ];
+
+// Correspondance secteur (libellé affiché) -> section NAF (lettre A-U),
+// utilisée pour interroger l'API Recherche d'entreprises (INSEE Sirene).
+// Référentiel NAF rév. 2 (INSEE).
+export const SECTEUR_NAF_SECTION: Record<string, string> = {
+  "Industrie manufacturière": "C",
+  "Commerce de gros et détail": "G",
+  "Transport et logistique": "H",
+  "Construction / BTP": "F",
+  "Information et communication": "J",
+  "Activités financières et d'assurance": "K",
+  "Activités spécialisées, scientifiques et techniques": "M",
+  "Administration publique": "O",
+  "Santé humaine et action sociale": "Q",
+  "Enseignement": "P",
+  "Hébergement et restauration": "I",
+  "Agriculture, sylviculture, pêche": "A",
+};
