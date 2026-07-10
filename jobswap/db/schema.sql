@@ -124,3 +124,8 @@ CREATE TABLE IF NOT EXISTS seed_profiles (
 -- que les bases déjà déployées se mettent à jour automatiquement au
 -- prochain démarrage, sans intervention manuelle.
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS search_radius_km INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS specialisation TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS commercial_clientele TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS commercial_cycle TEXT NOT NULL DEFAULT '';

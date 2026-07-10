@@ -15,6 +15,33 @@ export default function ConfidentialitePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPwError(data.error || "Erreur."); return; }
+      setPwSuccess(true);
+      setCurrentPassword("");
+      setNewPassword("");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   useEffect(() => {
     fetch("/api/consent")
       .then((r) => r.json())
@@ -138,6 +165,34 @@ export default function ConfidentialitePage() {
             </div>
           </div>
         </label>
+      </div>
+
+      <div className="card p-6 mb-6">
+        <div className="font-medium text-ink text-sm mb-1">Changer mon mot de passe</div>
+        <form onSubmit={changePassword} className="space-y-3 mt-2">
+          {pwError && <div className="bg-coralL text-coral text-xs rounded-sm px-3 py-2">{pwError}</div>}
+          {pwSuccess && <div className="bg-seaL text-sea text-xs rounded-sm px-3 py-2">Mot de passe modifié avec succès.</div>}
+          <input
+            type="password"
+            className="input"
+            placeholder="Mot de passe actuel"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            className="input"
+            placeholder="Nouveau mot de passe (8 caractères min.)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            minLength={8}
+            required
+          />
+          <button type="submit" disabled={pwSaving} className="btn-ghost px-4 py-2 text-sm">
+            {pwSaving ? "Enregistrement…" : "Changer le mot de passe"}
+          </button>
+        </form>
       </div>
 
       <div className="card p-6 mb-6">

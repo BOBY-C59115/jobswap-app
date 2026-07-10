@@ -7,19 +7,33 @@ export const CLASSIFICATIONS = [
   "Cadre N3",
 ];
 
+// Nomenclature NAF rév. 2 (INSEE) — les 21 sections (A à U) sont ici
+// listées de façon EXHAUSTIVE (il n'existe pas de 22e section). C'est le
+// niveau le plus agrégé de la nomenclature officielle ; les niveaux plus
+// fins (88 divisions, 732 codes) ne sont pas repris ici pour rester
+// lisibles dans un formulaire.
 export const SECTEURS_NAF = [
+  "Agriculture, sylviculture et pêche",
+  "Industries extractives",
   "Industrie manufacturière",
-  "Commerce de gros et détail",
-  "Transport et logistique",
-  "Construction / BTP",
+  "Production et distribution d'électricité, de gaz, de vapeur et d'air conditionné",
+  "Production et distribution d'eau, assainissement, gestion des déchets et dépollution",
+  "Construction",
+  "Commerce ; réparation d'automobiles et de motocycles",
+  "Transports et entreposage",
+  "Hébergement et restauration",
   "Information et communication",
   "Activités financières et d'assurance",
+  "Activités immobilières",
   "Activités spécialisées, scientifiques et techniques",
+  "Activités de services administratifs et de soutien",
   "Administration publique",
-  "Santé humaine et action sociale",
   "Enseignement",
-  "Hébergement et restauration",
-  "Agriculture, sylviculture, pêche",
+  "Santé humaine et action sociale",
+  "Arts, spectacles et activités récréatives",
+  "Autres activités de services",
+  "Activités des ménages en tant qu'employeurs",
+  "Activités extra-territoriales",
 ];
 
 export const CONVENTIONS_COLLECTIVES = [
@@ -78,18 +92,27 @@ export const ENVISAGED_MODES = [
 
 // Correspondance secteur (libellé affiché) -> section NAF (lettre A-U),
 // utilisée pour interroger l'API Recherche d'entreprises (INSEE Sirene).
-// Référentiel NAF rév. 2 (INSEE).
+// Référentiel NAF rév. 2 (INSEE) — mapping exhaustif des 21 sections.
 export const SECTEUR_NAF_SECTION: Record<string, string> = {
+  "Agriculture, sylviculture et pêche": "A",
+  "Industries extractives": "B",
   "Industrie manufacturière": "C",
-  "Commerce de gros et détail": "G",
-  "Transport et logistique": "H",
-  "Construction / BTP": "F",
+  "Production et distribution d'électricité, de gaz, de vapeur et d'air conditionné": "D",
+  "Production et distribution d'eau, assainissement, gestion des déchets et dépollution": "E",
+  "Construction": "F",
+  "Commerce ; réparation d'automobiles et de motocycles": "G",
+  "Transports et entreposage": "H",
+  "Hébergement et restauration": "I",
   "Information et communication": "J",
   "Activités financières et d'assurance": "K",
+  "Activités immobilières": "L",
   "Activités spécialisées, scientifiques et techniques": "M",
+  "Activités de services administratifs et de soutien": "N",
   "Administration publique": "O",
-  "Santé humaine et action sociale": "Q",
   "Enseignement": "P",
-  "Hébergement et restauration": "I",
-  "Agriculture, sylviculture, pêche": "A",
+  "Santé humaine et action sociale": "Q",
+  "Arts, spectacles et activités récréatives": "R",
+  "Autres activités de services": "S",
+  "Activités des ménages en tant qu'employeurs": "T",
+  "Activités extra-territoriales": "U",
 };

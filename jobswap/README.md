@@ -1,13 +1,49 @@
-# JobSwap — application fonctionnelle (v4 : base de données persistante)
+# JobSwap — application fonctionnelle (v5 : sécurité, référentiels, spécialisations)
 
 Application web complète : inscription, profil détaillé (poste, rémunération,
-avantages sociaux, prérequis, mobilité), matching pondéré multi-critères,
-calcul du gain réel (économique via le barème kilométrique fiscal officiel,
-écologique via les facteurs ADEME), données de marché réelles (France
-Travail, INSEE Sirene), et désormais une **vraie base de données persistante
-(Postgres)** qui ne s'efface plus à chaque redéploiement.
+avantages sociaux, prérequis, mobilité), matching pondéré multi-critères
+(métier, classification, rémunération, attractivité, **distance ET temps
+réel**), calcul du gain réel (économique, écologique), rayon de recherche
+configurable, données de marché réelles, et base de données persistante.
 
-## Nouveautés v4 — pourquoi ce changement
+## Nouveautés v5
+
+- **Mot de passe oublié** : lien de réinitialisation envoyé par e-mail
+  (Resend, gratuit jusqu'à 3000 e-mails/mois — voir `.env.example`). Sans
+  clé configurée, la demande ne renvoie jamais d'erreur visible (sécurité :
+  ne jamais révéler si un e-mail existe), mais aucun e-mail n'est envoyé.
+- **Changer son mot de passe** une fois connecté, depuis l'onglet
+  Confidentialité.
+- **Codes ROME élargis** : passés de 16 à une centaine, couvrant les 14
+  grands domaines professionnels du référentiel officiel, avec un champ de
+  recherche au lieu d'une liste déroulante simple. Cette liste reste une
+  sélection large mais **non exhaustive** (le référentiel officiel compte
+  plusieurs centaines de fiches) — voir la note dans `lib/rome.ts` pour la
+  piste d'exhaustivité totale via l'API officielle "ROME 4.0 - Métiers".
+- **Secteurs NAF complets** : les 21 sections officielles (A à U) de la
+  nomenclature INSEE, de façon exhaustive à ce niveau d'agrégation.
+- **Spécialisations par métier** : pour les postes commerciaux (codes
+  D14xx), deux champs supplémentaires apparaissent — type de clientèle
+  (BtoB / BtoC / Mixte) et cycle de vente (court / long terme). Un champ
+  libre "Spécificités du poste" couvre les autres nuances non modélisées.
+
+## Nouveautés v4 (rappel)
+
+- Base de données migrée de SQLite (fichier, non persistant sur la plupart
+  des hébergeurs) vers **Postgres** (Neon recommandé, gratuit et durable).
+- Rayon de recherche configurable, gain de temps de trajet comme critère de
+  score à part entière (pas seulement le gain économique).
+
+## Stack technique
+
+- **Next.js 14** (App Router) + TypeScript + Tailwind CSS
+- **Postgres** (hébergé, ex. Neon) via le driver `pg`
+- **jose** : signature de session (JWT en cookie httpOnly)
+- **bcryptjs** : hachage des mots de passe
+- **Resend** (optionnel) : envoi d'e-mails de réinitialisation
+- **OpenRouteService** (optionnel) : distance routière réelle
+- **France Travail** (optionnel) et **INSEE Sirene** (aucune clé requise) :
+  données de marché réelles
 
 Les versions précédentes stockaient les données dans un simple fichier
 (SQLite) sur le disque du serveur. Sur la plupart des hébergeurs (dont

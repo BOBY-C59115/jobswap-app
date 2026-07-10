@@ -98,6 +98,10 @@ export async function POST(req: NextRequest) {
     subj_evolution: Number(body.subjEvolution) || 3,
     subj_stress: Number(body.subjStress) || 3,
 
+    specialisation: body.specialisation || "",
+    commercial_clientele: body.commercialClientele || "",
+    commercial_cycle: body.commercialCycle || "",
+
     residence_city: body.residenceCity,
     residence_postal_code: residenceCity.postalCode,
     residence_lat: residenceCity.lat,
