@@ -80,6 +80,7 @@ const initial = {
   residenceCity: "Roanne",
   workplaceCity: "Lyon",
   commuteDaysPerWeek: 5,
+  searchRadiusKm: 0,
 
   currentVehicleType: "berline",
   currentFuelType: "sp98",
@@ -145,6 +146,7 @@ export default function ProfilPage() {
       residenceCity: profile.residence_city,
       workplaceCity: profile.workplace_city,
       commuteDaysPerWeek: profile.commute_days_per_week,
+      searchRadiusKm: profile.search_radius_km,
       currentVehicleType: profile.current_vehicle_type,
       currentFuelType: profile.current_fuel_type,
       currentFiscalCv: profile.current_fiscal_cv,
@@ -370,6 +372,19 @@ export default function ProfilPage() {
           <Field label={`Jours travaillés sur site / semaine : ${form.commuteDaysPerWeek}`}>
             <input type="range" min={0} max={5} className="w-full accent-sea2" value={form.commuteDaysPerWeek}
               onChange={(e) => set("commuteDaysPerWeek", Number(e.target.value))} />
+          </Field>
+          <Field label="Rayon de recherche souhaité autour de votre domicile">
+            <select className="input" value={form.searchRadiusKm} onChange={(e) => set("searchRadiusKm", Number(e.target.value))}>
+              <option value={0}>Pas de limite</option>
+              <option value={15}>15 km</option>
+              <option value={25}>25 km</option>
+              <option value={40}>40 km</option>
+              <option value={60}>60 km</option>
+              <option value={100}>100 km</option>
+            </select>
+            <p className="text-[11px] text-fog mt-1">
+              Les matches dont le nouveau trajet dépasserait ce rayon ne vous seront pas proposés.
+            </p>
           </Field>
         </Section>
 

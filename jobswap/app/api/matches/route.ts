@@ -62,13 +62,14 @@ export async function GET() {
     fuelType: profile.current_fuel_type as FuelType,
     fiscalCv: profile.current_fiscal_cv,
     consumptionPer100km: profile.current_consumption,
+    searchRadiusKm: profile.search_radius_km || 0,
     envisagedMode: profile.envisaged_mode as UserMobility["envisagedMode"],
     envisagedFuelType: (profile.envisaged_fuel_type || undefined) as FuelType | undefined,
     envisagedFiscalCv: profile.envisaged_fiscal_cv || undefined,
     envisagedConsumption: profile.envisaged_consumption || undefined,
   };
 
-  const results = await rankMatches(
+  const { results, excludedByRadius } = await rankMatches(
     profile.rome_code,
     profile.classification,
     profile.salaire_brut_annuel,
@@ -78,5 +79,10 @@ export async function GET() {
     15
   );
 
-  return NextResponse.json({ matches: results, disabled: false });
+  return NextResponse.json({
+    matches: results,
+    disabled: false,
+    searchRadiusKm: profile.search_radius_km || 0,
+    excludedByRadius,
+  });
 }

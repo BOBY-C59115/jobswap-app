@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   commute_distance_km REAL NOT NULL DEFAULT 0,
   commute_duration_min REAL NOT NULL DEFAULT 0,
   commute_days_per_week INTEGER NOT NULL DEFAULT 5,
+  search_radius_km INTEGER NOT NULL DEFAULT 0,
 
   current_vehicle_type TEXT NOT NULL DEFAULT 'berline',
   current_fuel_type TEXT NOT NULL DEFAULT 'sp98',
@@ -115,3 +116,11 @@ CREATE TABLE IF NOT EXISTS seed_profiles (
   workplace_lat REAL NOT NULL,
   workplace_lng REAL NOT NULL
 );
+
+-- ── Migrations idempotentes ──────────────────────────────────────────────
+-- CREATE TABLE IF NOT EXISTS ne modifie jamais une table déjà existante :
+-- toute colonne ajoutée après la création initiale d'une base (Neon) doit
+-- donc être ajoutée ici via ALTER TABLE ... ADD COLUMN IF NOT EXISTS, pour
+-- que les bases déjà déployées se mettent à jour automatiquement au
+-- prochain démarrage, sans intervention manuelle.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS search_radius_km INTEGER NOT NULL DEFAULT 0;

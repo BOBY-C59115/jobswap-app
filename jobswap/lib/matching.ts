@@ -36,6 +36,7 @@ export type UserMobility = {
   fuelType: FuelType;
   fiscalCv: number;
   consumptionPer100km: number;
+  searchRadiusKm: number; // 0 = pas de limite
   envisagedMode:
     | "vehicule_identique"
     | "vehicule_electrique"
@@ -67,7 +68,8 @@ export type MatchResult = MatchCandidate & {
     contrat: number;
     remuneration: number;
     attractivite: number;
-    mobilite: number;
+    distance: number;
+    temps: number;
   };
   gains: MatchGains;
 };
@@ -95,7 +97,7 @@ function cheapPreScore(
   residenceLat: number,
   residenceLng: number,
   candidate: MatchCandidate
-): number {
+): { score: number; haversineDistanceKm: number } {
   let metier = 0;
   if (userRome === candidate.romeCode) metier = 30;
   else if (romeFamily(userRome) === romeFamily(candidate.romeCode)) metier = 18;
@@ -109,10 +111,10 @@ function cheapPreScore(
     : 0;
   const remuneration = Math.max(0, 10 - salaireEcart * 30);
 
-  const distKm = haversineKm(residenceLat, residenceLng, candidate.workplaceLat, candidate.workplaceLng);
-  const proximite = Math.max(0, 20 - distKm / 6);
+  const haversineDistanceKm = haversineKm(residenceLat, residenceLng, candidate.workplaceLat, candidate.workplaceLng);
+  const proximite = Math.max(0, 20 - haversineDistanceKm / 6);
 
-  return metier + classification + remuneration + proximite;
+  return { score: metier + classification + remuneration + proximite, haversineDistanceKm };
 }
 
 /**
@@ -161,8 +163,8 @@ export async function computeGains(
     newAnnualKm
   );
 
-  const distanceSavedKmPerDay = Math.max(0, (mobility.currentDistanceKm - route.distanceKm) * 2);
-  const timeSavedMinPerDay = Math.max(0, (mobility.currentDurationMin - route.durationMin) * 2);
+  const distanceSavedKmPerDay = (mobility.currentDistanceKm - route.distanceKm) * 2;
+  const timeSavedMinPerDay = (mobility.currentDurationMin - route.durationMin) * 2;
 
   return {
     newDistanceKm: route.distanceKm,
@@ -184,19 +186,37 @@ export async function rankMatches(
   pool: MatchCandidate[],
   excludeId: string,
   limit = 15
-): Promise<MatchResult[]> {
-  const preScored = pool
+): Promise<{ results: MatchResult[]; excludedByRadius: number }> {
+  const radius = mobility.searchRadiusKm || 0;
+
+  // Filtre de repli (bon marché, à vol d'oiseau) : on élimine large, la marge
+  // de sécurité de +30% couvre l'écart entre vol d'oiseau et route réelle.
+  const withPreScore = pool
     .filter((c) => c.id !== excludeId)
     .map((c) => ({
       candidate: c,
-      pre: cheapPreScore(userRome, userClassification, userSalaire, mobility.residenceLat, mobility.residenceLng, c),
-    }))
-    .sort((a, b) => b.pre - a.pre)
-    .slice(0, Math.max(limit, 20));
+      ...cheapPreScore(userRome, userClassification, userSalaire, mobility.residenceLat, mobility.residenceLng, c),
+    }));
+
+  const withinRoughRadius = radius > 0
+    ? withPreScore.filter((c) => c.haversineDistanceKm <= radius * 1.3)
+    : withPreScore;
+
+  const preScored = withinRoughRadius
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(limit * 2, 30));
 
   const results: MatchResult[] = [];
+  let excludedByRadius = 0;
+
   for (const { candidate } of preScored) {
     const gains = await computeGains(mobility, candidate);
+
+    // Filtre définitif sur la distance routière réelle (le vrai rayon demandé)
+    if (radius > 0 && gains.newDistanceKm > radius) {
+      excludedByRadius++;
+      continue;
+    }
 
     let metier = 0;
     if (userRome === candidate.romeCode) metier = 30;
@@ -205,7 +225,7 @@ export async function rankMatches(
 
     const classDist = classificationDistance(userClassification, candidate.classification);
     const classification = Math.max(0, 15 - classDist * 5);
-    const contrat = 5; // information disponible mais non discriminante seule ici
+    const contrat = 5;
 
     const salaireEcart = userSalaire > 0
       ? Math.abs(userSalaire - candidate.salaireBrutAnnuel) / userSalaire
@@ -219,26 +239,30 @@ export async function rankMatches(
         candidate.subjEvolution +
         (6 - candidate.subjStress)) /
       5;
-    const attractivite = Math.round((attractiviteRaw / 5) * 20);
+    const attractivite = Math.round((attractiviteRaw / 5) * 15);
 
-    const mobiliteRaw = Math.min(
-      20,
-      (gains.distanceSavedKmPerDay / 40) * 20
-    );
-    const mobilite = Math.round(Math.max(0, mobiliteRaw));
+    // Gain de distance (12 pts) et gain de TEMPS (13 pts, légèrement
+    // prépondérant) : le temps récupéré sur le trajet domicile-travail est
+    // le moteur principal du bien-être visé par JobSwap, pas seulement
+    // l'économie kilométrique.
+    const distance = Math.round(Math.max(0, Math.min(12, (gains.distanceSavedKmPerDay / 40) * 12)));
+    const temps = Math.round(Math.max(0, Math.min(13, (gains.timeSavedMinPerDay / 45) * 13)));
 
     const score = Math.min(
       100,
-      Math.round(metier + classification + contrat + remuneration + attractivite + mobilite)
+      Math.round(metier + classification + contrat + remuneration + attractivite + distance + temps)
     );
 
     results.push({
       ...candidate,
       score,
-      breakdown: { metier, classification, contrat, remuneration, attractivite, mobilite },
+      breakdown: { metier, classification, contrat, remuneration, attractivite, distance, temps },
       gains,
     });
   }
 
-  return results.sort((a, b) => b.score - a.score).slice(0, limit);
+  return {
+    results: results.sort((a, b) => b.score - a.score).slice(0, limit),
+    excludedByRadius,
+  };
 }

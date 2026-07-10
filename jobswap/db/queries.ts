@@ -55,6 +55,7 @@ export type Profile = {
   commute_distance_km: number;
   commute_duration_min: number;
   commute_days_per_week: number;
+  search_radius_km: number;
   current_vehicle_type: string;
   current_fuel_type: string;
   current_fiscal_cv: number;
@@ -154,7 +155,7 @@ const PROFILE_COLUMNS = [
   "subj_management", "subj_valeurs", "subj_ambiance", "subj_evolution", "subj_stress",
   "residence_city", "residence_postal_code", "residence_lat", "residence_lng",
   "workplace_city", "workplace_postal_code", "workplace_lat", "workplace_lng",
-  "commute_distance_km", "commute_duration_min", "commute_days_per_week",
+  "commute_distance_km", "commute_duration_min", "commute_days_per_week", "search_radius_km",
   "current_vehicle_type", "current_fuel_type", "current_fiscal_cv", "current_consumption", "current_vehicle_age",
   "carpool_passengers", "public_transport_pass",
   "envisaged_mode", "envisaged_vehicle_type", "envisaged_fuel_type", "envisaged_fiscal_cv", "envisaged_consumption",

@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
     commute_distance_km: route.distanceKm,
     commute_duration_min: route.durationMin,
     commute_days_per_week: Number(body.commuteDaysPerWeek) || 5,
+    search_radius_km: Number(body.searchRadiusKm) || 0,
 
     current_vehicle_type: body.currentVehicleType,
     current_fuel_type: body.currentFuelType,
