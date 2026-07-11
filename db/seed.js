@@ -54,8 +54,8 @@ const ROME = [
 ];
 
 const SECTEURS = [
-  "Industrie manufacturière", "Commerce de gros et détail", "Transport et logistique",
-  "Construction / BTP", "Information et communication", "Activités financières et d'assurance",
+  "Industrie manufacturière", "Commerce ; réparation d'automobiles et de motocycles", "Transports et entreposage",
+  "Construction", "Information et communication", "Activités financières et d'assurance",
   "Activités spécialisées, scientifiques et techniques", "Administration publique",
   "Santé humaine et action sociale",
 ];

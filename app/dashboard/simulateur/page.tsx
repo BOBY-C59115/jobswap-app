@@ -1,242 +1,202 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useMe } from "@/lib/useMe";
+import { annualTransportCost, FuelType } from "@/lib/bareme";
+import { emissionsForMode, fmtCO2Kg } from "@/lib/emissions";
+import { FUEL_TYPES, ENVISAGED_MODES } from "@/lib/refdata";
 
-const CONSUMPTION: Record<string, number> = {
-  small: 5,
-  medium: 7,
-  suv: 9,
-  utility: 10,
-  electric: 0,
-  hydrogen: 0,
-};
-const ELEC_CONSO = 15;
-const ELEC_PRICE = 0.2;
-const H2_PRICE = 12;
-
-const CO2_PER_KM: Record<string, number> = {
-  sp98: 185,
-  sp95: 175,
-  diesel: 150,
-  e85: 50,
-  elec: 0,
-  hydro: 0,
-};
-
-function fmt(n: number) {
-  return n >= 1000
+function fmtEUR(n: number) {
+  return Math.abs(n) >= 1000
     ? (n / 1000).toFixed(1).replace(".", ",") + " K€"
     : Math.round(n) + " €";
 }
-function fmtCO2(t: number) {
-  return t >= 1 ? t.toFixed(2) + " t" : Math.round(t * 1000) + " kg";
-}
 
 export default function SimulateurPage() {
-  const [dist, setDist] = useState(84);
-  const [price, setPrice] = useState(2.18);
-  const [days, setDays] = useState(210);
-  const [size, setSize] = useState("medium");
-  const [motor, setMotor] = useState("sp98");
-  const [future, setFuture] = useState("none");
+  const { profile, loading } = useMe();
 
-  const isElec = motor === "elec";
-  const isH2 = motor === "hydro";
+  // Trajets par jour : 1 aller-retour (par défaut) ou 2 (ex. retour le midi)
+  const [tripsPerDay, setTripsPerDay] = useState(1);
+  const [distanceKm, setDistanceKm] = useState(0); // distance réelle aller (un seul sens)
+  const [daysPerWeek, setDaysPerWeek] = useState(5);
+  const [fuelType, setFuelType] = useState<FuelType>("sp98");
+  const [fiscalCv, setFiscalCv] = useState(6);
+  const [consumption, setConsumption] = useState(6.5);
+
+  const [envisagedMode, setEnvisagedMode] = useState<
+    "vehicule_identique" | "vehicule_electrique" | "vae" | "marche" | "transport_commun" | "covoiturage"
+  >("vehicule_identique");
+  const [envisagedDistanceKm, setEnvisagedDistanceKm] = useState(0);
+
+  // Pré-remplissage depuis le vrai profil (distance réelle calculée par itinéraire routier)
+  useEffect(() => {
+    if (!profile) return;
+    setDistanceKm(profile.commute_distance_km || 0);
+    setDaysPerWeek(profile.commute_days_per_week || 5);
+    setFuelType((profile.current_fuel_type || "sp98") as FuelType);
+    setFiscalCv(profile.current_fiscal_cv || 6);
+    setConsumption(profile.current_consumption || 6.5);
+    setEnvisagedMode((profile.envisaged_mode || "vehicule_identique") as any);
+    // Par défaut, hypothèse d'un nouveau trajet 3x plus court pour explorer un scénario
+    setEnvisagedDistanceKm(Math.round((profile.commute_distance_km || 10) / 3));
+  }, [profile]);
 
   const result = useMemo(() => {
-    const annKm = dist * days;
+    const daysPerYear = daysPerWeek * 47;
+    const annualKmCurrent = distanceKm * 2 * tripsPerDay * daysPerYear;
+    const annualKmEnvisaged = envisagedDistanceKm * 2 * tripsPerDay * daysPerYear;
 
-    let fuelCost;
-    if (isElec) fuelCost = (annKm / 100) * ELEC_CONSO * ELEC_PRICE;
-    else if (isH2) fuelCost = (annKm / 100) * 1 * H2_PRICE;
-    else fuelCost = (annKm / 100) * (CONSUMPTION[size] || 7) * price;
+    const currentCost = annualTransportCost("vehicule_identique", fiscalCv, fuelType, annualKmCurrent);
+    const envisagedCost = annualTransportCost(envisagedMode, fiscalCv, fuelType, annualKmEnvisaged);
 
-    const extraCost = annKm * 0.08;
-    const totalCost = fuelCost + extraCost;
+    const currentEmissions = emissionsForMode("vehicule_identique", fuelType, consumption, annualKmCurrent);
+    const envisagedEmissions = emissionsForMode(envisagedMode, fuelType, consumption, annualKmEnvisaged);
 
-    const avgSpeed = 52;
-    const annHours = annKm / avgSpeed;
-
-    const co2gKm = CO2_PER_KM[motor] || 185;
-    const co2Ton = (annKm * co2gKm) / 1_000_000;
-
-    const newKm = 8 * 2 * days;
-    let newFuelCost;
-    if (future === "vae" || future === "marche") newFuelCost = 0;
-    else if (future === "tc")
-      newFuelCost = (newKm / 100) * 13 * ELEC_PRICE * 5;
-    else if (future === "elec")
-      newFuelCost = (newKm / 100) * ELEC_CONSO * ELEC_PRICE;
-    else {
-      const conso = CONSUMPTION[size] || 7;
-      const p = isElec ? ELEC_PRICE : price;
-      const c2 = isElec ? ELEC_CONSO / 100 : conso / 100;
-      newFuelCost = newKm * c2 * p;
-    }
-    const saving = fuelCost + extraCost - (newFuelCost + newKm * 0.04);
-    const newCo2 = (newKm * co2gKm) / 1_000_000;
-
-    let futureLbl = "Hypothèse trajet réduit à 8 km";
-    if (future === "vae") futureLbl = "Passage au VAE · 0 carburant";
-    if (future === "tc") futureLbl = "Transport en commun";
-    if (future === "elec") futureLbl = "Passage électrique";
-    if (future === "marche") futureLbl = "Marche à pied · 0 émission";
+    const avgSpeedKmh = 52;
+    const currentHours = annualKmCurrent / avgSpeedKmh;
+    const envisagedHours = annualKmEnvisaged / avgSpeedKmh;
 
     return {
-      fuelCost,
-      totalCost,
-      annHours,
-      co2Ton,
-      newCo2,
-      saving,
-      futureLbl,
+      annualKmCurrent: Math.round(annualKmCurrent),
+      annualKmEnvisaged: Math.round(annualKmEnvisaged),
+      currentCost,
+      envisagedCost,
+      economicGain: currentCost - envisagedCost,
+      currentEmissions,
+      envisagedEmissions,
+      co2Gain: currentEmissions - envisagedEmissions,
+      currentHours: Math.round(currentHours),
+      envisagedHours: Math.round(envisagedHours),
+      timeGainHours: Math.round(currentHours - envisagedHours),
     };
-  }, [dist, price, days, size, motor, future, isElec, isH2]);
+  }, [distanceKm, envisagedDistanceKm, tripsPerDay, daysPerWeek, fuelType, fiscalCv, consumption, envisagedMode]);
+
+  if (loading) return <div className="text-fog text-sm">Chargement…</div>;
+
+  if (!profile) {
+    return (
+      <div className="card p-6">
+        <p className="text-sm text-ink2 mb-3">
+          Complétez votre profil (ville de résidence, ville de travail, véhicule) pour utiliser le simulateur avec vos vraies données.
+        </p>
+        <Link href="/dashboard/profil" className="btn-primary px-4 py-2 inline-block text-sm">
+          Compléter mon profil
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h1 className="font-heading text-2xl font-bold text-ink mb-1">
-        Simulateur d&apos;impact
-      </h1>
-      <p className="text-fog text-sm mb-8">
-        Estimez le coût, le temps et les émissions liés à votre trajet actuel,
-        et le gain potentiel après un échange de poste.
+      <h1 className="font-heading text-2xl font-bold text-ink mb-1">Simulateur d&apos;impact</h1>
+      <p className="text-fog text-sm mb-2">
+        Pré-rempli avec votre profil : {profile.residence_city} → {profile.workplace_city}
+        {" "}({profile.commute_distance_km} km réels par itinéraire routier). Modifiable pour explorer d&apos;autres scénarios.
+      </p>
+      <p className="text-[11px] text-fog mb-8">
+        Calculs basés sur le barème kilométrique fiscal officiel et les facteurs d&apos;émission ADEME
+        (les mêmes que ceux utilisés pour vos matches).
       </p>
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="card p-6 space-y-5">
+          <h2 className="font-heading text-sm font-bold text-ink">Votre trajet actuel</h2>
+
           <div>
             <label className="block text-xs font-medium text-ink2 mb-1">
-              Distance : {dist} km / jour
+              Distance aller (un seul sens) : {distanceKm} km
             </label>
-            <input
-              type="range"
-              min={1}
-              max={150}
-              value={dist}
-              onChange={(e) => setDist(Number(e.target.value))}
-              className="w-full accent-sea2"
-            />
+            <input type="range" min={1} max={150} value={distanceKm}
+              onChange={(e) => setDistanceKm(Number(e.target.value))} className="w-full accent-sea2" />
           </div>
+
           <div>
-            <label className="block text-xs font-medium text-ink2 mb-1">
-              Jours travaillés : {days} jours / an
-            </label>
-            <input
-              type="range"
-              min={100}
-              max={260}
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full accent-sea2"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-ink2 mb-1">
-              Gabarit du véhicule
-            </label>
-            <select
-              className="input"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-            >
-              <option value="small">Citadine</option>
-              <option value="medium">Berline / compacte</option>
-              <option value="suv">SUV</option>
-              <option value="utility">Utilitaire</option>
+            <label className="block text-xs font-medium text-ink2 mb-1">Trajets par jour</label>
+            <select className="input" value={tripsPerDay} onChange={(e) => setTripsPerDay(Number(e.target.value))}>
+              <option value={1}>1 aller-retour (trajet classique)</option>
+              <option value={2}>2 aller-retours (ex. retour le midi)</option>
             </select>
           </div>
+
           <div>
             <label className="block text-xs font-medium text-ink2 mb-1">
-              Motorisation
+              Jours travaillés sur site : {daysPerWeek} / semaine
             </label>
-            <select
-              className="input"
-              value={motor}
-              onChange={(e) => setMotor(e.target.value)}
-            >
-              <option value="sp98">Essence SP98</option>
-              <option value="sp95">Essence SP95</option>
-              <option value="diesel">Diesel</option>
-              <option value="e85">E85</option>
-              <option value="elec">Électrique</option>
-              <option value="hydro">Hydrogène</option>
-            </select>
+            <input type="range" min={1} max={5} value={daysPerWeek}
+              onChange={(e) => setDaysPerWeek(Number(e.target.value))} className="w-full accent-sea2" />
           </div>
-          {!isElec && !isH2 && (
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-ink2 mb-1">
-                Prix carburant : {price.toFixed(2)} €/L
-              </label>
-              <input
-                type="range"
-                min={100}
-                max={250}
-                value={Math.round(price * 100)}
-                onChange={(e) => setPrice(Number(e.target.value) / 100)}
-                className="w-full accent-sea2"
-              />
+              <label className="block text-xs font-medium text-ink2 mb-1">Motorisation actuelle</label>
+              <select className="input" value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType)}>
+                {FUEL_TYPES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
             </div>
-          )}
+            <div>
+              <label className="block text-xs font-medium text-ink2 mb-1">Puissance fiscale (CV)</label>
+              <input type="number" min={1} max={20} className="input" value={fiscalCv}
+                onChange={(e) => setFiscalCv(Number(e.target.value))} />
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-medium text-ink2 mb-1">
-              Après échange de poste
+              Consommation réelle : {consumption} {fuelType === "electrique" ? "kWh" : "L"}/100km
             </label>
-            <select
-              className="input"
-              value={future}
-              onChange={(e) => setFuture(e.target.value)}
-            >
-              <option value="none">Trajet réduit (voiture, 8 km)</option>
-              <option value="vae">Vélo à assistance électrique</option>
-              <option value="marche">Marche à pied</option>
-              <option value="tc">Transport en commun</option>
-              <option value="elec">Véhicule électrique</option>
+            <input type="range" min={0} max={20} step={0.5} value={consumption}
+              onChange={(e) => setConsumption(Number(e.target.value))} className="w-full accent-sea2" />
+          </div>
+
+          <h2 className="font-heading text-sm font-bold text-ink pt-2 border-t border-ice2">
+            Scénario envisagé après échange
+          </h2>
+          <div>
+            <label className="block text-xs font-medium text-ink2 mb-1">Mode envisagé</label>
+            <select className="input" value={envisagedMode} onChange={(e) => setEnvisagedMode(e.target.value as any)}>
+              {ENVISAGED_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink2 mb-1">
+              Nouvelle distance aller : {envisagedDistanceKm} km
+            </label>
+            <input type="range" min={0} max={150} value={envisagedDistanceKm}
+              onChange={(e) => setEnvisagedDistanceKm(Number(e.target.value))} className="w-full accent-sea2" />
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Coût carburant</div>
-            <div className="font-heading text-xl font-bold text-ink">
-              -{fmt(result.fuelCost)}/an
+            <div className="text-xs text-fog mb-1">Kilométrage annuel actuel → envisagé</div>
+            <div className="font-heading text-lg font-bold text-ink">
+              {result.annualKmCurrent.toLocaleString("fr-FR")} km → {result.annualKmEnvisaged.toLocaleString("fr-FR")} km
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Coût total trajet</div>
-            <div className="font-heading text-xl font-bold text-ink">
-              {fmt(result.totalCost)}/an
+            <div className="text-xs text-fog mb-1">Coût annuel (barème fiscal officiel)</div>
+            <div className="font-heading text-lg font-bold text-ink">
+              {fmtEUR(result.currentCost)} → {fmtEUR(result.envisagedCost)}
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Temps passé</div>
-            <div className="font-heading text-xl font-bold text-ink">
-              {Math.round(result.annHours)} h/an
+            <div className="text-xs text-fog mb-1">Temps de trajet estimé</div>
+            <div className="font-heading text-lg font-bold text-ink">
+              {result.currentHours} h/an → {result.envisagedHours} h/an
             </div>
           </div>
           <div className="card p-5">
-            <div className="text-xs text-fog mb-1">Émissions CO₂</div>
-            <div className="font-heading text-xl font-bold text-ink">
-              {fmtCO2(result.co2Ton)}/an
-            </div>
-            <div className="mt-2 h-2 bg-ice2 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-sea2"
-                style={{
-                  width: `${Math.max(
-                    5,
-                    (result.newCo2 / Math.max(result.co2Ton, 0.01)) * 100
-                  )}%`,
-                }}
-              />
+            <div className="text-xs text-fog mb-1">Émissions CO2 (facteurs ADEME)</div>
+            <div className="font-heading text-lg font-bold text-ink">
+              {fmtCO2Kg(result.currentEmissions)} → {fmtCO2Kg(result.envisagedEmissions)}
             </div>
           </div>
+
           <div className="card p-5 border border-seaL bg-seaL/40">
-            <div className="text-xs text-sea mb-1">
-              Gain estimé après échange — {result.futureLbl}
-            </div>
+            <div className="text-xs text-sea mb-1">Gain estimé si ce scénario se réalise</div>
             <div className="font-heading text-xl font-bold text-sea">
-              +{fmt(result.saving)}/an
+              {result.economicGain >= 0 ? "+" : ""}{fmtEUR(result.economicGain)}/an ·{" "}
+              {result.co2Gain >= 0 ? "-" : "+"}{fmtCO2Kg(Math.abs(result.co2Gain))}/an ·{" "}
+              {result.timeGainHours >= 0 ? "+" : ""}{result.timeGainHours} h/an
             </div>
           </div>
         </div>

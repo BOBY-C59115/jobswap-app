@@ -20,7 +20,8 @@ type Match = {
     contrat: number;
     remuneration: number;
     attractivite: number;
-    mobilite: number;
+    distance: number;
+    temps: number;
   };
   gains: {
     newDistanceKm: number;
@@ -39,6 +40,8 @@ export default function MatchesPage() {
   const [error, setError] = useState<string | null>(null);
   const [disabled, setDisabled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchRadiusKm, setSearchRadiusKm] = useState(0);
+  const [excludedByRadius, setExcludedByRadius] = useState(0);
 
   useEffect(() => {
     fetch("/api/matches")
@@ -47,6 +50,8 @@ export default function MatchesPage() {
         if (!res.ok) { setError(data.error || "Erreur inconnue."); return; }
         if (data.disabled) { setDisabled(true); setError(data.reason); return; }
         setMatches(data.matches);
+        setSearchRadiusKm(data.searchRadiusKm || 0);
+        setExcludedByRadius(data.excludedByRadius || 0);
       })
       .catch(() => setError("Impossible de charger les matches."))
       .finally(() => setLoading(false));
@@ -55,11 +60,21 @@ export default function MatchesPage() {
   return (
     <div>
       <h1 className="font-heading text-2xl font-bold text-ink mb-1">Mes matches</h1>
-      <p className="text-fog text-sm mb-8">
+      <p className="text-fog text-sm mb-2">
         Score de compatibilité (métier, classification, rémunération,
-        attractivité du poste, gain de mobilité réel) et estimation du gain
-        économique/écologique si vous échangez avec ce profil.
+        attractivité du poste, gain de distance ET gain de temps réel) et
+        estimation du gain économique/écologique si vous échangez avec ce
+        profil.
       </p>
+      {searchRadiusKm > 0 && (
+        <p className="text-[11px] text-fog mb-8">
+          Recherche limitée à {searchRadiusKm} km autour de votre domicile
+          {excludedByRadius > 0 && ` (${excludedByRadius} profil${excludedByRadius > 1 ? "s" : ""} écarté${excludedByRadius > 1 ? "s" : ""} car trop loin)`}
+          {" — "}
+          <Link href="/dashboard/profil" className="text-sea underline">modifier ce rayon</Link>
+        </p>
+      )}
+      {searchRadiusKm === 0 && <div className="mb-8" />}
 
       {loading && <div className="text-fog text-sm">Calcul des matches en cours…</div>}
 
@@ -99,15 +114,24 @@ export default function MatchesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-ice2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4 border-t border-ice2">
               <div>
                 <div className="text-[10px] text-fog uppercase">Nouveau trajet</div>
-                <div className="text-sm font-medium text-ink">{m.gains.newDistanceKm} km</div>
+                <div className="text-sm font-medium text-ink">{m.gains.newDistanceKm} km · {m.gains.newDurationMin} min</div>
               </div>
               <div>
-                <div className="text-[10px] text-fog uppercase">Gain quotidien</div>
+                <div className="text-[10px] text-fog uppercase">Gain distance/jour</div>
                 <div className="text-sm font-medium text-sea2">
                   {m.gains.distanceSavedKmPerDay > 0 ? `-${m.gains.distanceSavedKmPerDay} km` : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-fog uppercase">Gain temps/jour</div>
+                <div className="text-sm font-medium text-sea2">
+                  {m.gains.timeSavedMinPerDay > 0 ? `-${m.gains.timeSavedMinPerDay} min` : "—"}
+                  {m.gains.timeSavedHoursPerYear > 0 && (
+                    <span className="text-[10px] text-fog"> ({m.gains.timeSavedHoursPerYear} h/an)</span>
+                  )}
                 </div>
               </div>
               <div>

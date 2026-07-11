@@ -77,9 +77,14 @@ const initial = {
   subjEvolution: 3,
   subjStress: 3,
 
+  specialisation: "",
+  commercialClientele: "",
+  commercialCycle: "",
+
   residenceCity: "Roanne",
   workplaceCity: "Lyon",
   commuteDaysPerWeek: 5,
+  searchRadiusKm: 0,
 
   currentVehicleType: "berline",
   currentFuelType: "sp98",
@@ -142,9 +147,13 @@ export default function ProfilPage() {
       subjAmbiance: profile.subj_ambiance,
       subjEvolution: profile.subj_evolution,
       subjStress: profile.subj_stress,
+      specialisation: profile.specialisation || "",
+      commercialClientele: profile.commercial_clientele || "",
+      commercialCycle: profile.commercial_cycle || "",
       residenceCity: profile.residence_city,
       workplaceCity: profile.workplace_city,
       commuteDaysPerWeek: profile.commute_days_per_week,
+      searchRadiusKm: profile.search_radius_km,
       currentVehicleType: profile.current_vehicle_type,
       currentFuelType: profile.current_fuel_type,
       currentFiscalCv: profile.current_fiscal_cv,
@@ -207,12 +216,61 @@ export default function ProfilPage() {
 
       <form onSubmit={onSubmit} className="space-y-6">
         <Section title="Poste et contrat">
-          <Field label="Métier (code ROME)">
-            <select className="input" value={form.romeCode} onChange={(e) => set("romeCode", e.target.value)}>
+          <Field label="Métier (code ROME) — tapez pour rechercher">
+            <input
+              className="input"
+              list="rome-options"
+              value={(() => {
+                const r = ROME_CODES.find((r) => r.code === form.romeCode);
+                return r ? `${r.label} — ${r.code}` : form.romeCode;
+              })()}
+              onChange={(e) => {
+                const match = ROME_CODES.find(
+                  (r) => `${r.label} — ${r.code}` === e.target.value || r.code === e.target.value
+                );
+                if (match) set("romeCode", match.code);
+              }}
+              placeholder="ex. comptabilité, maintenance, transport…"
+            />
+            <datalist id="rome-options">
               {ROME_CODES.map((r) => (
-                <option key={r.code} value={r.code}>{r.label} — {r.code}</option>
+                <option key={r.code} value={`${r.label} — ${r.code}`} />
               ))}
-            </select>
+            </datalist>
+            <p className="text-[11px] text-fog mt-1">
+              Liste large mais non exhaustive du référentiel officiel ({ROME_CODES.length} métiers).
+              Ne trouvez-vous pas le vôtre ? Décrivez-le dans le champ "Spécificités du poste" ci-dessous.
+            </p>
+          </Field>
+
+          {form.romeCode.startsWith("D14") && (
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Type de clientèle (commercial)">
+                <select className="input" value={form.commercialClientele} onChange={(e) => set("commercialClientele", e.target.value)}>
+                  <option value="">Non précisé</option>
+                  <option value="btob">BtoB (entreprises)</option>
+                  <option value="btoc">BtoC (particuliers)</option>
+                  <option value="mixte">Mixte</option>
+                </select>
+              </Field>
+              <Field label="Cycle de vente">
+                <select className="input" value={form.commercialCycle} onChange={(e) => set("commercialCycle", e.target.value)}>
+                  <option value="">Non précisé</option>
+                  <option value="court">Court terme</option>
+                  <option value="long">Long terme / complexe</option>
+                  <option value="mixte">Mixte</option>
+                </select>
+              </Field>
+            </div>
+          )}
+
+          <Field label="Spécificités du poste (optionnel)">
+            <input
+              className="input"
+              value={form.specialisation}
+              onChange={(e) => set("specialisation", e.target.value)}
+              placeholder="ex. spécialité technique, niche de marché, particularité non couverte ci-dessus…"
+            />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Secteur d'activité (NAF)">
@@ -370,6 +428,19 @@ export default function ProfilPage() {
           <Field label={`Jours travaillés sur site / semaine : ${form.commuteDaysPerWeek}`}>
             <input type="range" min={0} max={5} className="w-full accent-sea2" value={form.commuteDaysPerWeek}
               onChange={(e) => set("commuteDaysPerWeek", Number(e.target.value))} />
+          </Field>
+          <Field label="Rayon de recherche souhaité autour de votre domicile">
+            <select className="input" value={form.searchRadiusKm} onChange={(e) => set("searchRadiusKm", Number(e.target.value))}>
+              <option value={0}>Pas de limite</option>
+              <option value={15}>15 km</option>
+              <option value={25}>25 km</option>
+              <option value={40}>40 km</option>
+              <option value={60}>60 km</option>
+              <option value={100}>100 km</option>
+            </select>
+            <p className="text-[11px] text-fog mt-1">
+              Les matches dont le nouveau trajet dépasserait ce rayon ne vous seront pas proposés.
+            </p>
           </Field>
         </Section>
 

@@ -1,29 +1,142 @@
-# JobSwap — application fonctionnelle (MVP réel)
+# JobSwap — application fonctionnelle (v5 : sécurité, référentiels, spécialisations)
 
-Application web complète : inscription, profil anonymisé, matching
-multi-critères, simulateur d'impact, et back-office RGPD (consentements,
-export, suppression). Base de données réelle (SQLite), API réelle
-(Next.js Route Handlers), sessions signées (JWT en cookie httpOnly).
+Application web complète : inscription, profil détaillé (poste, rémunération,
+avantages sociaux, prérequis, mobilité), matching pondéré multi-critères
+(métier, classification, rémunération, attractivité, **distance ET temps
+réel**), calcul du gain réel (économique, écologique), rayon de recherche
+configurable, données de marché réelles, et base de données persistante.
+
+## Nouveautés v5
+
+- **Mot de passe oublié** : lien de réinitialisation envoyé par e-mail
+  (Resend, gratuit jusqu'à 3000 e-mails/mois — voir `.env.example`). Sans
+  clé configurée, la demande ne renvoie jamais d'erreur visible (sécurité :
+  ne jamais révéler si un e-mail existe), mais aucun e-mail n'est envoyé.
+- **Changer son mot de passe** une fois connecté, depuis l'onglet
+  Confidentialité.
+- **Codes ROME élargis** : passés de 16 à une centaine, couvrant les 14
+  grands domaines professionnels du référentiel officiel, avec un champ de
+  recherche au lieu d'une liste déroulante simple. Cette liste reste une
+  sélection large mais **non exhaustive** (le référentiel officiel compte
+  plusieurs centaines de fiches) — voir la note dans `lib/rome.ts` pour la
+  piste d'exhaustivité totale via l'API officielle "ROME 4.0 - Métiers".
+- **Secteurs NAF complets** : les 21 sections officielles (A à U) de la
+  nomenclature INSEE, de façon exhaustive à ce niveau d'agrégation.
+- **Spécialisations par métier** : pour les postes commerciaux (codes
+  D14xx), deux champs supplémentaires apparaissent — type de clientèle
+  (BtoB / BtoC / Mixte) et cycle de vente (court / long terme). Un champ
+  libre "Spécificités du poste" couvre les autres nuances non modélisées.
+
+## Nouveautés v4 (rappel)
+
+- Base de données migrée de SQLite (fichier, non persistant sur la plupart
+  des hébergeurs) vers **Postgres** (Neon recommandé, gratuit et durable).
+- Rayon de recherche configurable, gain de temps de trajet comme critère de
+  score à part entière (pas seulement le gain économique).
 
 ## Stack technique
 
 - **Next.js 14** (App Router) + TypeScript + Tailwind CSS
-- **better-sqlite3** : base de données fichier, aucune dépendance externe
+- **Postgres** (hébergé, ex. Neon) via le driver `pg`
 - **jose** : signature de session (JWT en cookie httpOnly)
 - **bcryptjs** : hachage des mots de passe
+- **Resend** (optionnel) : envoi d'e-mails de réinitialisation
+- **OpenRouteService** (optionnel) : distance routière réelle
+- **France Travail** (optionnel) et **INSEE Sirene** (aucune clé requise) :
+  données de marché réelles
 
-Aucune clé API externe n'est requise pour faire tourner l'application.
+Les versions précédentes stockaient les données dans un simple fichier
+(SQLite) sur le disque du serveur. Sur la plupart des hébergeurs (dont
+Render), ce disque est recréé à neuf à chaque redéploiement — donc **toutes
+les données de test disparaissaient** à chaque mise à jour de code ou de
+variable d'environnement. Ce n'était pas un bug, mais une limite connue de
+ce choix technique, indiquée dans les versions précédentes du README.
+
+La v4 remplace ce fichier par une **vraie base Postgres externe** (hébergée
+séparément du serveur d'application, par exemple sur **Neon**, gratuit et
+sans limite de durée). Les données survivent désormais à tous les
+redéploiements, changements de code, et redémarrages.
+
+### Migrer votre déploiement existant
+
+1. Créez un compte gratuit sur https://neon.tech
+2. Créez un projet (nommez-le par exemple "jobswap")
+3. Copiez la "Connection string" affichée (commence par `postgresql://`)
+4. Sur Render : Environment → Add Environment Variable → clé `DATABASE_URL`,
+   valeur = la chaîne copiée
+5. Redéployez (Render le fait automatiquement après l'enregistrement des
+   variables), puis lancez le peuplement des profils de démonstration une
+   fois (voir plus bas)
+
+**Important** : cette migration change le mécanisme de stockage. Les
+données créées sous l'ancienne version (SQLite) ne sont pas transférées
+automatiquement — c'est un nouveau départ, propre, mais vous devrez
+recréer votre compte de test une fois la bascule faite.
+
+### Lancer le peuplement des profils de démonstration sur Neon
+
+Depuis votre machine, avec `DATABASE_URL` renseigné dans `.env` :
+```bash
+npm install
+node db/seed.js
+```
+Ceci se connecte directement à votre base Neon et y insère les 90 profils
+fictifs. Pas besoin de le refaire à chaque déploiement — c'est fait une
+fois, les données restent en base.
+
+## Stack technique
+
+- **Next.js 14** (App Router) + TypeScript + Tailwind CSS
+- **Postgres** (hébergé, ex. Neon) via le driver `pg`
+- **jose** : signature de session (JWT en cookie httpOnly)
+- **bcryptjs** : hachage des mots de passe
+- **OpenRouteService** (optionnel) : distance routière réelle
+- **France Travail** (optionnel) et **INSEE Sirene** (aucune clé requise) :
+  données de marché réelles
 
 ## Démarrage en local
 
 ```bash
 npm install
-node db/seed.js       # crée un bassin de 90 profils fictifs pour le matching de démo
-cp .env.example .env  # puis générez un vrai JWT_SECRET (voir commentaire dans le fichier)
+cp .env.example .env  # renseignez DATABASE_URL (Neon) et générez un vrai JWT_SECRET
+node db/seed.js        # crée un bassin de 90 profils fictifs pour le matching de démo
 npm run dev
 ```
 
 Ouvrez http://localhost:3000.
+
+## Activer les statistiques France Travail (optionnel)
+
+1. Créez un compte gratuit sur https://francetravail.io
+2. Créez une application, associez-la à l'API "Offres d'emploi"
+3. Récupérez l'identifiant client et la clé secrète
+4. Ajoutez `FT_CLIENT_ID` et `FT_CLIENT_SECRET` dans vos variables
+   d'environnement (Render : Environment → Add Environment Variable)
+
+Sans ces identifiants, la statistique correspondante est simplement
+masquée — jamais de chiffre inventé. Les statistiques INSEE Sirene, elles,
+fonctionnent sans aucune clé.
+
+### Sur l'honnêteté de ces statistiques de marché
+
+France Travail et INSEE Sirene décrivent le **marché de l'emploi en
+général** (offres ouvertes, entreprises recensées) — ce ne sont **pas** des
+salariés inscrits sur JobSwap prêts à échanger. L'interface le précise
+explicitement. Il n'existe pas non plus, à ce jour, de donnée publique du
+type "score de bien-être par métier précis" : l'enquête de référence sur le
+sujet (Insee/Dares, "Conditions de travail et risques psychosociaux")
+publie ses premiers résultats à partir de 2026 — à surveiller pour une
+prochaine version.
+
+## Activer la distance réelle par la route (recommandé)
+
+1. Créez un compte gratuit sur https://openrouteservice.org/dev/#/signup
+2. Récupérez votre clé API
+3. Ajoutez `ORS_API_KEY=votre_clé` dans votre fichier `.env` (en local) ou dans
+   les variables d'environnement de votre hébergeur (Render, etc.)
+
+Sans cette clé, l'application fonctionne quand même, avec une estimation
+moins précise, clairement signalée comme telle dans l'interface.
 
 ## Build de production
 

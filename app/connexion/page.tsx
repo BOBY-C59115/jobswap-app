@@ -85,6 +85,11 @@ function ConnexionForm() {
             Créer un profil
           </Link>
         </p>
+        <p className="text-xs text-fog mt-2 text-center">
+          <Link href="/mot-de-passe-oublie" className="text-fog underline">
+            Mot de passe oublié ?
+          </Link>
+        </p>
       </form>
     </main>
   );

@@ -44,6 +44,9 @@ export type Profile = {
   subj_ambiance: number;
   subj_evolution: number;
   subj_stress: number;
+  specialisation: string;
+  commercial_clientele: string;
+  commercial_cycle: string;
   residence_city: string;
   residence_postal_code: string;
   residence_lat: number;
@@ -55,6 +58,7 @@ export type Profile = {
   commute_distance_km: number;
   commute_duration_min: number;
   commute_days_per_week: number;
+  search_radius_km: number;
   current_vehicle_type: string;
   current_fuel_type: string;
   current_fiscal_cv: number;
@@ -143,6 +147,27 @@ export async function softDeleteUser(id: string) {
   await query(`DELETE FROM consents WHERE user_id = $1`, [id]);
 }
 
+export async function setResetToken(userId: string, token: string, expiresAt: Date) {
+  await query(
+    `UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3`,
+    [token, expiresAt.toISOString(), userId]
+  );
+}
+
+export async function getUserByResetToken(token: string): Promise<User | undefined> {
+  return queryOne<User>(
+    `SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires > NOW() AND deleted_at IS NULL`,
+    [token]
+  );
+}
+
+export async function resetPassword(userId: string, passwordHash: string) {
+  await query(
+    `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+    [passwordHash, userId]
+  );
+}
+
 // ── Profiles ─────────────────────────────────────────────────────────────
 const PROFILE_COLUMNS = [
   "pseudonym", "rome_code", "rome_label", "secteur_naf", "convention_collective",
@@ -152,9 +177,10 @@ const PROFILE_COLUMNS = [
   "horaires", "penibilite", "deplacements_frequence",
   "diplome_requis", "experience_annees", "certifications", "permis", "langues",
   "subj_management", "subj_valeurs", "subj_ambiance", "subj_evolution", "subj_stress",
+  "specialisation", "commercial_clientele", "commercial_cycle",
   "residence_city", "residence_postal_code", "residence_lat", "residence_lng",
   "workplace_city", "workplace_postal_code", "workplace_lat", "workplace_lng",
-  "commute_distance_km", "commute_duration_min", "commute_days_per_week",
+  "commute_distance_km", "commute_duration_min", "commute_days_per_week", "search_radius_km",
   "current_vehicle_type", "current_fuel_type", "current_fiscal_cv", "current_consumption", "current_vehicle_age",
   "carpool_passengers", "public_transport_pass",
   "envisaged_mode", "envisaged_vehicle_type", "envisaged_fuel_type", "envisaged_fiscal_cv", "envisaged_consumption",
